@@ -1261,7 +1261,7 @@ theend:
  * - list the swap files when recovering
  * - find the name of the n'th swap file when recovering
  */
-int 
+int
 recover_names (
     char_u *fname,             /* base for swap file name */
     int list,                       /* when TRUE, list the swap file names */
@@ -1847,14 +1847,14 @@ errorret:
    * blocks.
    */
   if (buf->b_ml.ml_line_lnum != lnum) {
-    ml_flush_line(buf);
+    //ml_flush_line(buf);
 
     /*
      * Find the data block containing the line.
      * This also fills the stack with the blocks from the root to the data
      * block and releases any locked block.
      */
-    if ((hp = ml_find_line(buf, lnum, ML_FIND)) == NULL) {
+    if((hp = ml_find_line(buf, lnum, ML_FIND)) == NULL) {
       if (recursive == 0) {
         // Avoid giving this message for a recursive call, may happen
         // when the GUI redraws part of the text.
@@ -1903,7 +1903,7 @@ int ml_line_alloced(void)
  *
  * return FAIL for failure, OK otherwise
  */
-int ml_append(
+int ml_append_flush(
     linenr_T lnum,                  // append after this line (can be 0)
     char_u *line,                   // text of the new line
     colnr_T len,                    // length of new line, including NUL, or 0
@@ -1916,6 +1916,18 @@ int ml_append(
 
   if (curbuf->b_ml.ml_line_lnum != 0)
     ml_flush_line(curbuf);
+  return ml_append_int(curbuf, lnum, line, len, newfile, FALSE);
+}
+
+int ml_append(
+    linenr_T lnum,
+    char_u *line,
+    colnr_T len,
+    bool newfile
+)
+{
+  if (curbuf->b_ml.ml_mfp == NULL && open_buffer(FALSE, NULL, 0) == FAIL)
+    return FAIL;
   return ml_append_int(curbuf, lnum, line, len, newfile, FALSE);
 }
 
@@ -2443,7 +2455,7 @@ int ml_replace_buf(buf_T *buf, linenr_T lnum, char_u *line, bool copy)
     line = vim_strsave(line);
   }
   if (buf->b_ml.ml_line_lnum != lnum) {  // other line buffered
-    ml_flush_line(buf);  // flush it
+    //ml_flush_line(buf);  // flush it
   } else if (buf->b_ml.ml_flags & ML_LINE_DIRTY) {  // same line allocated
     ml_add_deleted_len(buf->b_ml.ml_line_ptr, -1);
     readlen = false;  // already added the length
@@ -3268,7 +3280,7 @@ get_file_in_dir (
 /*
  * Print the ATTENTION message: info about an existing swap file.
  */
-static void 
+static void
 attention_message (
     buf_T *buf,           /* buffer being edited */
     char_u *fname         /* swap file name */
@@ -4002,7 +4014,7 @@ long ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp, bool no_ff)
   int extra = 0;
 
   // take care of cached line first
-  ml_flush_line(buf);
+  //ml_flush_line(buf);
 
   if (buf->b_ml.ml_usedchunks == -1
       || buf->b_ml.ml_chunksize == NULL
@@ -4107,7 +4119,7 @@ void goto_byte(long cnt)
   long boff = cnt;
   linenr_T lnum;
 
-  ml_flush_line(curbuf);  // cached line may be dirty
+  //ml_flush_line(curbuf);  // cached line may be dirty
   setpcmark();
   if (boff) {
     boff--;

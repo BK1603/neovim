@@ -38,7 +38,8 @@ static int pum_width;               // width of displayed pum items
 static int pum_base_width;          // width of pum items base
 static int pum_kind_width;          // width of pum items kind column
 static int pum_extra_width;         // width of extra stuff
-static int pum_scrollbar;           // TRUE when scrollbar present
+static int pum_scrollbar;           // one when scrollbar present, else zero
+static bool pum_rl;                 // true when popupmenu is drawn 'rightleft'
 
 static int pum_anchor_grid;         // grid where position is defined
 static int pum_row;                 // top row of pum
@@ -62,9 +63,12 @@ static void pum_compute_size(void)
   pum_kind_width = 0;
   pum_extra_width = 0;
   for (int i = 0; i < pum_size; i++) {
-    int w = vim_strsize(pum_array[i].pum_text);
-    if (pum_base_width < w) {
-      pum_base_width = w;
+    int w;
+    if (pum_array[i].pum_text != NULL) {
+      w = vim_strsize(pum_array[i].pum_text);
+      if (pum_base_width < w) {
+        pum_base_width = w;
+      }
     }
     if (pum_array[i].pum_kind != NULL) {
       w = vim_strsize(pum_array[i].pum_kind) + 1;
@@ -110,6 +114,8 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
                    || (State == CMDLINE && ui_has(kUIWildmenu));
   }
 
+  pum_rl = (curwin->w_p_rl && State != CMDLINE);
+
   do {
     // Mark the pum as visible already here,
     // to avoid that must_redraw is set when 'cursorcolumn' is on.
@@ -127,7 +133,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
     } else {
       // anchor position: the start of the completed word
       pum_win_row = curwin->w_wrow;
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         cursor_col = curwin->w_width - curwin->w_wcol - 1;
       } else {
         cursor_col = curwin->w_wcol;
@@ -270,16 +276,14 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
       def_width = max_width;
     }
 
-    if ((((cursor_col < Columns - p_pw)
-          || (cursor_col < Columns - max_width))
-         && !curwin->w_p_rl)
-        || (curwin->w_p_rl
-            && ((cursor_col > p_pw) || (cursor_col > max_width)))) {
+    if ((((cursor_col < Columns - p_pw) || (cursor_col < Columns - max_width))
+         && !pum_rl)
+        || (pum_rl && ((cursor_col > p_pw) || (cursor_col > max_width)))) {
       // align pum with "cursor_col"
       pum_col = cursor_col;
 
       // start with the maximum space available
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         pum_width = pum_col - pum_scrollbar + 1;
       } else {
         assert(Columns - pum_col - pum_scrollbar >= INT_MIN
@@ -297,19 +301,16 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
           pum_width = (int)p_pw;
         }
       }
-    } else if (((cursor_col > p_pw || cursor_col > max_width)
-                && !curwin->w_p_rl)
-               || (curwin->w_p_rl
-                   && (cursor_col < Columns - p_pw
-                       || cursor_col < Columns - max_width))) {
+    } else if (((cursor_col > p_pw || cursor_col > max_width) && !pum_rl)
+               || (pum_rl && (cursor_col < Columns - p_pw
+                              || cursor_col < Columns - max_width))) {
       // align pum edge with "cursor_col"
-      if (curwin->w_p_rl
-          && W_ENDCOL(curwin) < max_width + pum_scrollbar + 1) {
+      if (pum_rl && W_ENDCOL(curwin) < max_width + pum_scrollbar + 1) {
         pum_col = cursor_col + max_width + pum_scrollbar + 1;
         if (pum_col >= Columns) {
           pum_col = Columns - 1;
         }
-      } else if (!curwin->w_p_rl) {
+      } else if (!pum_rl) {
         if (curwin->w_wincol > Columns - max_width - pum_scrollbar
             && max_width <= p_pw) {
           // use full width to end of the screen
@@ -320,7 +321,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
         }
       }
 
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         pum_width = pum_col - pum_scrollbar + 1;
       } else {
         pum_width = Columns - pum_col - pum_scrollbar;
@@ -328,7 +329,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
 
       if (pum_width < p_pw) {
         pum_width = (int)p_pw;
-        if (curwin->w_p_rl) {
+        if (pum_rl) {
           if (pum_width > pum_col) {
             pum_width = pum_col;
           }
@@ -346,7 +347,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
       }
     } else if (Columns < def_width) {
       // not enough room, will use what we have
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         assert(Columns - 1 >= INT_MIN);
         pum_col = (int)(Columns - 1);
       } else {
@@ -360,7 +361,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed,
         max_width = (int)p_pw;
       }
 
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         pum_col = max_width - 1;
       } else {
         assert(Columns - max_width >= INT_MIN
@@ -399,7 +400,7 @@ void pum_redraw(void)
   int grid_width = pum_width;
   int col_off = 0;
   bool extra_space = false;
-  if (curwin->w_p_rl) {
+  if (pum_rl) {
     col_off = pum_width;
     if (pum_col < curwin->w_wincol + curwin->w_width - 1) {
       grid_width += 1;
@@ -460,7 +461,7 @@ void pum_redraw(void)
 
     // prepend a space if there is room
     if (extra_space) {
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         grid_putchar(&pum_grid, ' ', row, col_off + 1, attr);
       } else {
         grid_putchar(&pum_grid, ' ', row, col_off - 1, attr);
@@ -507,7 +508,7 @@ void pum_redraw(void)
             st = (char_u *)transstr((const char *)s);
             *p = saved;
 
-            if (curwin->w_p_rl) {
+            if (pum_rl) {
               char_u *rt = reverse_text(st);
               char_u *rt_start = rt;
               int size = vim_strsize(rt);
@@ -542,7 +543,7 @@ void pum_redraw(void)
             }
 
             // Display two spaces for a Tab.
-            if (curwin->w_p_rl) {
+            if (pum_rl) {
               grid_puts_len(&pum_grid, (char_u *)"  ", 2, row, col - 1,
                             attr);
               col -= 2;
@@ -577,7 +578,7 @@ void pum_redraw(void)
         break;
       }
 
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         grid_fill(&pum_grid, row, row + 1, col_off - pum_base_width - n + 1,
                   col + 1, ' ', ' ', attr);
         col = col_off - pum_base_width - n + 1;
@@ -589,7 +590,7 @@ void pum_redraw(void)
       totwidth = pum_base_width + n;
     }
 
-    if (curwin->w_p_rl) {
+    if (pum_rl) {
       grid_fill(&pum_grid, row, row + 1, col_off - pum_width + 1, col + 1,
                 ' ', ' ', attr);
     } else {
@@ -598,7 +599,7 @@ void pum_redraw(void)
     }
 
     if (pum_scrollbar > 0) {
-      if (curwin->w_p_rl) {
+      if (pum_rl) {
         grid_putchar(&pum_grid, ' ', row, col_off - pum_width,
                      i >= thumb_pos && i < thumb_pos + thumb_heigth
                      ? attr_thumb : attr_scroll);
@@ -910,10 +911,17 @@ void pum_set_event_info(dict_T *dict)
   if (!pum_visible()) {
     return;
   }
-  tv_dict_add_nr(dict, S_LEN("height"), pum_height);
-  tv_dict_add_nr(dict, S_LEN("width"), pum_width);
-  tv_dict_add_nr(dict, S_LEN("row"), pum_row);
-  tv_dict_add_nr(dict, S_LEN("col"), pum_col);
+  double w, h, r, c;
+  if (!ui_pum_get_pos(&w, &h, &r, &c)) {
+    w = (double)pum_width;
+    h = (double)pum_height;
+    r = (double)pum_row;
+    c = (double)pum_col;
+  }
+  tv_dict_add_float(dict, S_LEN("height"), h);
+  tv_dict_add_float(dict, S_LEN("width"), w);
+  tv_dict_add_float(dict, S_LEN("row"), r);
+  tv_dict_add_float(dict, S_LEN("col"), c);
   tv_dict_add_nr(dict, S_LEN("size"), pum_size);
   tv_dict_add_special(dict, S_LEN("scrollbar"),
                       pum_scrollbar ? kSpecialVarTrue : kSpecialVarFalse);

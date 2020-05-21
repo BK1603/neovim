@@ -277,6 +277,7 @@ enum {
 #define WIM_FULL        1
 #define WIM_LONGEST     2
 #define WIM_LIST        4
+#define WIM_BUFLASTUSED 8
 
 // arguments for can_bs()
 #define BS_INDENT       'i'     // "Indent"
@@ -835,6 +836,8 @@ enum {
   , WV_RLC
   , WV_SCBIND
   , WV_SCROLL
+  , WV_SISO
+  , WV_SO
   , WV_SPELL
   , WV_CUC
   , WV_CUL

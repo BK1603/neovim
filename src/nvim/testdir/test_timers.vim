@@ -5,7 +5,7 @@ if !has('timers')
 endif
 
 source shared.vim
-source screendump.vim
+source term_util.vim
 source load.vim
 
 func MyHandler(timer)
@@ -337,6 +337,10 @@ func Test_nocatch_garbage_collect()
   call test_override('no_wait_return', 1)
   delfunc CauseAnError
   delfunc FeedChar
+endfunc
+
+func Test_timer_invalid_callback()
+  call assert_fails('call timer_start(0, "0")', 'E921')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

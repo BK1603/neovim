@@ -86,7 +86,7 @@ uint64_t extmark_set(buf_T *buf, uint64_t ns_id, uint64_t id,
         extmark_del(buf, ns_id, id);
       } else {
         // TODO(bfredl): we need to do more if "revising" a decoration mark.
-        MarkTreeIter itr[1];
+        MarkTreeIter itr[1] = { 0 };
         old_pos = marktree_lookup(buf->b_marktree, old_mark, itr);
         assert(itr->node);
         if (old_pos.row == row && old_pos.col == col) {
@@ -119,7 +119,7 @@ revised:
 
 static bool extmark_setraw(buf_T *buf, uint64_t mark, int row, colnr_T col)
 {
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   mtpos_t pos = marktree_lookup(buf->b_marktree, mark, itr);
   if (pos.row == -1) {
     return false;
@@ -147,7 +147,7 @@ bool extmark_del(buf_T *buf, uint64_t ns_id, uint64_t id)
     return false;
   }
 
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   mtpos_t pos = marktree_lookup(buf->b_marktree, mark, itr);
   assert(pos.row >= 0);
   marktree_del_itr(buf->b_marktree, itr, false);
@@ -207,7 +207,7 @@ bool extmark_clear(buf_T *buf, uint64_t ns_id,
     delete_set = map_new(uint64_t, uint64_t)();
   }
 
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, l_row, l_col, itr);
   while (true) {
     mtmark_t mark = marktree_itr_current(itr);
@@ -276,7 +276,7 @@ ExtmarkArray extmark_get(buf_T *buf, uint64_t ns_id,
                          int64_t amount, bool reverse)
 {
   ExtmarkArray array = KV_INITIAL_VALUE;
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   // Find all the marks
   marktree_itr_get_ext(buf->b_marktree, (mtpos_t){ l_row, l_col },
                        itr, reverse, false, NULL);
@@ -396,7 +396,7 @@ void u_extmark_copy(buf_T *buf,
 
   ExtmarkUndoObject undo;
 
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, l_row, l_col, itr);
   while (true) {
     mtmark_t mark = marktree_itr_current(itr);
@@ -578,6 +578,15 @@ void extmark_splice(buf_T *buf,
   }
 }
 
+void extmark_splice_cols(buf_T *buf,
+                         int start_row, colnr_T start_col,
+                         colnr_T old_col, colnr_T new_col,
+                         ExtmarkOp undo)
+{
+  extmark_splice(buf, start_row, start_col,
+                 0, old_col,
+                 0, new_col, undo);
+}
 
 void extmark_move_region(buf_T *buf,
                          int start_row, colnr_T start_col,
@@ -738,7 +747,7 @@ void clear_virttext(VirtText *text)
 
 VirtText *extmark_find_virttext(buf_T *buf, int row, uint64_t ns_id)
 {
-  MarkTreeIter itr[1];
+  MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, row, 0,  itr);
   while (true) {
     mtmark_t mark = marktree_itr_current(itr);
@@ -789,7 +798,7 @@ bool decorations_redraw_start(buf_T *buf, int top_row,
     ExtmarkItem *item = map_ref(uint64_t, ExtmarkItem)(buf->b_extmark_index,
                                                        start_id, false);
     if ((!(mark.id&MARKTREE_END_FLAG) && altpos.row < top_row
-         && !kv_size(item->virt_text))
+         && item && !kv_size(item->virt_text))
         || ((mark.id&MARKTREE_END_FLAG) && altpos.row >= top_row)) {
       goto next_mark;
     }
@@ -854,7 +863,7 @@ int decorations_redraw_col(buf_T *buf, int col, DecorationRedrawState *state)
 
     if (endpos.row < mark.row
         || (endpos.row == mark.row && endpos.col <= mark.col)) {
-      if (!kv_size(item->virt_text)) {
+      if (item && !kv_size(item->virt_text)) {
         goto next_mark;
       }
     }

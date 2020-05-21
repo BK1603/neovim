@@ -24,7 +24,7 @@
 #include "nvim/diff.h"
 #include "nvim/digraph.h"
 #include "nvim/edit.h"
-#include "nvim/eval.h"
+#include "nvim/eval/userfunc.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
@@ -615,7 +615,9 @@ static void normal_redraw_mode_message(NormalState *s)
 
     kmsg = keep_msg;
     keep_msg = NULL;
-    // showmode() will clear keep_msg, but we want to use it anyway
+    // Showmode() will clear keep_msg, but we want to use it anyway.
+    // First update w_topline.
+    setcursor();
     update_screen(0);
     // now reset it, otherwise it's put in the history again
     keep_msg = kmsg;
@@ -623,6 +625,7 @@ static void normal_redraw_mode_message(NormalState *s)
     xfree(kmsg);
   }
   setcursor();
+  ui_cursor_shape();                  // show different cursor shape
   ui_flush();
   if (msg_scroll || emsg_on_display) {
     os_delay(1000L, true);            // wait at least one second
@@ -1256,6 +1259,8 @@ static void normal_redraw(NormalState *s)
   if (need_maketitle) {
     maketitle();
   }
+
+  curbuf->b_last_used = time(NULL);
 
   // Display message after redraw. If an external message is still visible,
   // it contains the kept message already.
@@ -1964,8 +1969,8 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
       break;
 
     case OP_FOLD:
-      VIsual_reselect = false;          /* don't reselect now */
-      foldCreate(oap->start.lnum, oap->end.lnum);
+      VIsual_reselect = false;          // don't reselect now
+      foldCreate(curwin, oap->start.lnum, oap->end.lnum);
       break;
 
     case OP_FOLDOPEN:
@@ -1983,9 +1988,9 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
 
     case OP_FOLDDEL:
     case OP_FOLDDELREC:
-      VIsual_reselect = false;          /* don't reselect now */
-      deleteFold(oap->start.lnum, oap->end.lnum,
-          oap->op_type == OP_FOLDDELREC, oap->is_VIsual);
+      VIsual_reselect = false;          // don't reselect now
+      deleteFold(curwin, oap->start.lnum, oap->end.lnum,
+                 oap->op_type == OP_FOLDDELREC, oap->is_VIsual);
       break;
 
     case OP_NR_ADD:
@@ -2556,7 +2561,14 @@ do_mouse (
    * JUMP!
    */
   jump_flags = jump_to_mouse(jump_flags,
-      oap == NULL ? NULL : &(oap->inclusive), which_button);
+                             oap == NULL ? NULL : &(oap->inclusive),
+                             which_button);
+
+  // A click in the window toolbar has no side effects.
+  if (jump_flags & MOUSE_WINBAR) {
+    return false;
+  }
+
   moved = (jump_flags & CURSOR_MOVED);
   in_status_line = (jump_flags & IN_STATUS_LINE);
   in_sep_line = (jump_flags & IN_SEP_LINE);
@@ -2584,12 +2596,13 @@ do_mouse (
 
   /* Set global flag that we are extending the Visual area with mouse
    * dragging; temporarily minimize 'scrolloff'. */
-  if (VIsual_active && is_drag && p_so) {
-    /* In the very first line, allow scrolling one line */
-    if (mouse_row == 0)
+  if (VIsual_active && is_drag && get_scrolloff_value()) {
+    // In the very first line, allow scrolling one line
+    if (mouse_row == 0) {
       mouse_dragging = 2;
-    else
+    } else {
       mouse_dragging = 1;
+    }
   }
 
   /* When dragging the mouse above the window, scroll down. */
@@ -4089,9 +4102,9 @@ void scroll_redraw(int up, long count)
     scrollup(count, true);
   else
     scrolldown(count, true);
-  if (p_so) {
-    /* Adjust the cursor position for 'scrolloff'.  Mark w_topline as
-     * valid, otherwise the screen jumps back at the end of the file. */
+  if (get_scrolloff_value()) {
+    // Adjust the cursor position for 'scrolloff'.  Mark w_topline as
+    // valid, otherwise the screen jumps back at the end of the file.
     cursor_correct();
     check_cursor_moved(curwin);
     curwin->w_valid |= VALID_TOPLINE;
@@ -4120,6 +4133,7 @@ void scroll_redraw(int up, long count)
   }
   if (curwin->w_cursor.lnum != prev_lnum)
     coladvance(curwin->w_curswant);
+  curwin->w_viewport_invalid = true;
   redraw_later(VALID);
 }
 
@@ -4135,8 +4149,8 @@ static void nv_zet(cmdarg_T *cap)
   int old_fen = curwin->w_p_fen;
   bool undo = false;
 
-  assert(p_siso <= INT_MAX);
-  int l_p_siso = (int)p_siso;
+  int l_p_siso = (int)get_sidescrolloff_value();
+  assert(l_p_siso <= INT_MAX);
 
   if (ascii_isdigit(nchar)) {
     /*
@@ -4340,11 +4354,12 @@ dozet:
   /* "zD": delete fold at cursor recursively */
   case 'd':
   case 'D':   if (foldManualAllowed(false)) {
-      if (VIsual_active)
+      if (VIsual_active) {
         nv_operator(cap);
-      else
-        deleteFold(curwin->w_cursor.lnum,
-            curwin->w_cursor.lnum, nchar == 'D', false);
+      } else {
+        deleteFold(curwin, curwin->w_cursor.lnum,
+                   curwin->w_cursor.lnum, nchar == 'D', false);
+      }
   }
     break;
 
@@ -4352,11 +4367,11 @@ dozet:
   case 'E':   if (foldmethodIsManual(curwin)) {
       clearFolding(curwin);
       changed_window_setting();
-  } else if (foldmethodIsMarker(curwin))
-      deleteFold((linenr_T)1, curbuf->b_ml.ml_line_count,
-          true, false);
-    else
+    } else if (foldmethodIsMarker(curwin)) {
+      deleteFold(curwin, (linenr_T)1, curbuf->b_ml.ml_line_count, true, false);
+    } else {
       EMSG(_("E352: Cannot erase folds with current 'foldmethod'"));
+    }
     break;
 
   /* "zn": fold none: reset 'foldenable' */
@@ -4458,16 +4473,16 @@ dozet:
   case 'r':
     curwin->w_p_fdl += cap->count1;
     {
-      int d = getDeepestNesting();
+      int d = getDeepestNesting(curwin);
       if (curwin->w_p_fdl >= d) {
         curwin->w_p_fdl = d;
       }
     }
     break;
 
-  /* "zR": open all folds */
-  case 'R':   curwin->w_p_fdl = getDeepestNesting();
-    old_fdl = -1;                       /* force an update */
+  case 'R':     //  "zR": open all folds
+    curwin->w_p_fdl = getDeepestNesting(curwin);
+    old_fdl = -1;                       // force an update
     break;
 
   case 'j':     /* "zj" move to next fold downwards */

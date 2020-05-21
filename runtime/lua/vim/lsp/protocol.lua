@@ -620,6 +620,15 @@ function protocol.make_client_capabilities()
         -- Send textDocument/didSave after saving (BufWritePost)
         didSave = true;
       };
+      codeAction = {
+        dynamicRegistration = false;
+
+        codeActionLiteralSupport = {
+          codeActionKind = {
+            valueSet = {};
+          };
+        };
+      };
       completion = {
         dynamicRegistration = false;
         completionItem = {
@@ -644,6 +653,18 @@ function protocol.make_client_capabilities()
         -- TODO(tjdevries): Implement this
         contextSupport = false;
       };
+      declaration = {
+        linkSupport = true;
+      };
+      definition = {
+        linkSupport = true;
+      };
+      implementation = {
+        linkSupport = true;
+      };
+      typeDefinition = {
+        linkSupport = true;
+      };
       hover = {
         dynamicRegistration = false;
         contentFormat = { protocol.MarkupKind.Markdown; protocol.MarkupKind.PlainText };
@@ -663,21 +684,36 @@ function protocol.make_client_capabilities()
       documentHighlight = {
         dynamicRegistration = false
       };
-      -- documentSymbol = {
-      --   dynamicRegistration = false;
-      --   symbolKind = {
-      --     valueSet = (function()
-      --       local res = {}
-      --       for k in pairs(protocol.SymbolKind) do
-      --         if type(k) == 'string' then table.insert(res, k) end
-      --       end
-      --       return res
-      --     end)();
-      --   };
-      --   hierarchicalDocumentSymbolSupport = false;
-      -- };
+      documentSymbol = {
+        dynamicRegistration = false;
+        symbolKind = {
+          valueSet = (function()
+            local res = {}
+            for k in pairs(protocol.SymbolKind) do
+              if type(k) == 'number' then table.insert(res, k) end
+            end
+            return res
+          end)();
+        };
+        hierarchicalDocumentSymbolSupport = true;
+      };
     };
-    workspace = nil;
+    workspace = {
+      symbol = {
+        dynamicRegistration = false;
+        symbolKind = {
+          valueSet = (function()
+            local res = {}
+            for k in pairs(protocol.SymbolKind) do
+              if type(k) == 'number' then table.insert(res, k) end
+            end
+            return res
+          end)();
+        };
+        hierarchicalWorkspaceSymbolSupport = true;
+      };
+      applyEdit = true;
+    };
     experimental = nil;
   }
 end

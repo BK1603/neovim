@@ -241,7 +241,7 @@ describe('LSP', function()
 
     it('should succeed with manual shutdown', function()
       local expected_callbacks = {
-        {NIL, "shutdown", {}, 1};
+        {NIL, "shutdown", {}, 1, NIL};
         {NIL, "test", {}, 1};
       }
       test_rpc_server {
@@ -754,27 +754,32 @@ describe('LSP', function()
 
   it('highlight groups', function()
     eq({'LspDiagnosticsError',
+        'LspDiagnosticsErrorSign',
         'LspDiagnosticsHint',
+        'LspDiagnosticsHintSign',
         'LspDiagnosticsInformation',
+        'LspDiagnosticsInformationSign',
         'LspDiagnosticsUnderline',
         'LspDiagnosticsUnderlineError',
         'LspDiagnosticsUnderlineHint',
         'LspDiagnosticsUnderlineInformation',
         'LspDiagnosticsUnderlineWarning',
         'LspDiagnosticsWarning',
+        'LspDiagnosticsWarningSign',
       },
       exec_lua([[require'vim.lsp'; return vim.fn.getcompletion('Lsp', 'highlight')]]))
   end)
 
-  describe('apply_edits', function()
+  describe('apply_text_edits', function()
     before_each(function()
       insert(dedent([[
         First line of text
         Second line of text
         Third line of text
-        Fourth line of text]]))
+        Fourth line of text
+        å å ɧ 汉语 ↥ 🤦 🦄]]))
     end)
-    it('applies apply simple edits', function()
+    it('applies simple edits', function()
       local edits = {
         make_edit(0, 0, 0, 0, {"123"});
         make_edit(1, 0, 1, 1, {"2"});
@@ -786,6 +791,7 @@ describe('LSP', function()
         '2econd line of text';
         '3ird line of text';
         'Fourth line of text';
+        'å å ɧ 汉语 ↥ 🤦 🦄';
       }, buf_lines(1))
     end)
     it('applies complex edits', function()
@@ -809,7 +815,479 @@ describe('LSP', function()
         'The next line of text';
         'another line of text';
         'before this!';
+        'å å ɧ 汉语 ↥ 🤦 🦄';
       }, buf_lines(1))
+    end)
+    it('applies non-ASCII characters edits', function()
+      local edits = {
+        make_edit(4, 3, 4, 4, {"ä"});
+      }
+      exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
+      eq({
+        'First line of text';
+        'Second line of text';
+        'Third line of text';
+        'Fourth line of text';
+        'å ä ɧ 汉语 ↥ 🤦 🦄';
+      }, buf_lines(1))
+    end)
+
+    describe('with LSP end line after what Vim considers to be the end line', function()
+      it('applies edits when the last linebreak is considered a new line', function()
+        local edits = {
+          make_edit(0, 0, 5, 0, {"All replaced"});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
+        eq({'All replaced'}, buf_lines(1))
+      end)
+      it('applies edits when the end line is 2 larger than vim\'s', function()
+        local edits = {
+          make_edit(0, 0, 6, 0, {"All replaced"});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
+        eq({'All replaced'}, buf_lines(1))
+      end)
+      it('applies edits with a column offset', function()
+        local edits = {
+          make_edit(0, 0, 5, 2, {"All replaced"});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
+        eq({'All replaced'}, buf_lines(1))
+      end)
+    end)
+  end)
+
+  describe('apply_text_document_edit', function()
+    local target_bufnr
+    local text_document_edit = function(editVersion)
+      return {
+        edits = {
+          make_edit(0, 0, 0, 3, "First ↥ 🤦 🦄")
+      },
+        textDocument = {
+          uri = "file://fake/uri";
+          version = editVersion
+        }
+      }
+    end
+    before_each(function()
+      target_bufnr = exec_lua [[
+        local bufnr = vim.uri_to_bufnr("file://fake/uri")
+        local lines = {"1st line of text", "2nd line of 语text"}
+        vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
+        return bufnr
+      ]]
+    end)
+    it('correctly goes ahead with the edit if all is normal', function()
+      exec_lua('vim.lsp.util.apply_text_document_edit(...)', text_document_edit(5))
+      eq({
+        'First ↥ 🤦 🦄 line of text';
+        '2nd line of 语text';
+      }, buf_lines(target_bufnr))
+    end)
+    it('correctly goes ahead with the edit if the version is vim.NIL', function()
+      -- we get vim.NIL when we decode json null value.
+      local json = exec_lua[[
+        return vim.fn.json_decode("{ \"a\": 1, \"b\": null }")
+      ]]
+      eq(json.b, exec_lua("return vim.NIL"))
+
+      exec_lua('vim.lsp.util.apply_text_document_edit(...)', text_document_edit(exec_lua("return vim.NIL")))
+      eq({
+        'First ↥ 🤦 🦄 line of text';
+        '2nd line of 语text';
+      }, buf_lines(target_bufnr))
+    end)
+    it('skips the edit if the version of the edit is behind the local buffer ', function()
+      local apply_edit_mocking_current_version = function(edit, versionedBuf)
+        exec_lua([[
+          local args = {...}
+          local versionedBuf = args[2]
+          vim.lsp.util.buf_versions[versionedBuf.bufnr] = versionedBuf.currentVersion
+          vim.lsp.util.apply_text_document_edit(...)
+        ]], edit, versionedBuf)
+      end
+
+      local baseText = {
+        '1st line of text';
+        '2nd line of 语text';
+      }
+
+      eq(baseText, buf_lines(target_bufnr))
+
+      -- Apply an edit for an old version, should skip
+      apply_edit_mocking_current_version(text_document_edit(2), {currentVersion=7; bufnr=target_bufnr})
+      eq(baseText, buf_lines(target_bufnr)) -- no change
+
+      -- Sanity check that next version to current does apply change
+      apply_edit_mocking_current_version(text_document_edit(8), {currentVersion=7; bufnr=target_bufnr})
+      eq({
+        'First ↥ 🤦 🦄 line of text';
+        '2nd line of 语text';
+      }, buf_lines(target_bufnr))
+    end)
+  end)
+  describe('workspace_apply_edit', function()
+    it('workspace/applyEdit returns ApplyWorkspaceEditResponse', function()
+      local expected = {
+        applied = true;
+        failureReason = nil;
+      }
+      eq(expected, exec_lua [[
+        local apply_edit = {
+          label = nil;
+          edit = {};
+        }
+        return vim.lsp.callbacks['workspace/applyEdit'](nil, nil, apply_edit)
+      ]])
+    end)
+  end)
+  describe('completion_list_to_complete_items', function()
+    -- Completion option precedence:
+    -- textEdit.newText > insertText > label
+    -- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
+    it('should choose right completion option', function ()
+      local prefix = 'foo'
+      local completion_list = {
+        -- resolves into label
+        { label='foobar' },
+        { label='foobar', textEdit={} },
+        -- resolves into insertText
+        { label='foocar', insertText='foobar' },
+        { label='foocar', insertText='foobar', textEdit={} },
+        -- resolves into textEdit.newText
+        { label='foocar', insertText='foodar', textEdit={newText='foobar'} },
+        { label='foocar', textEdit={newText='foobar'} }
+      }
+      local completion_list_items = {items=completion_list}
+      local expected = {
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label = 'foobar' } } } } },
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foobar', textEdit={} } } }  } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar' } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', textEdit={newText='foobar'} } } } } },
+      }
+
+      eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
+      eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list_items, prefix))
+      eq({}, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], {}, prefix))
+    end)
+  end)
+  describe('buf_diagnostics_save_positions', function()
+    it('stores the diagnostics in diagnostics_by_buf', function ()
+      local diagnostics = {
+        { range = {}; message = "diag1" },
+        { range = {}; message = "diag2" },
+      }
+      exec_lua([[
+        vim.lsp.util.buf_diagnostics_save_positions(...)]], 0, diagnostics)
+      eq(1, exec_lua [[ return #vim.lsp.util.diagnostics_by_buf ]])
+      eq(diagnostics, exec_lua [[
+        for _, diagnostics in pairs(vim.lsp.util.diagnostics_by_buf) do
+          return diagnostics
+        end
+      ]])
+    end)
+  end)
+  describe('lsp.util.show_line_diagnostics', function()
+    it('creates floating window and returns popup bufnr and winnr if current line contains diagnostics', function()
+      eq(3, exec_lua [[
+        local buffer = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+          "testing";
+          "123";
+        })
+        local diagnostics = {
+          {
+            range = {
+              start = { line = 0; character = 1; };
+              ["end"] = { line = 0; character = 3; };
+            };
+            severity = vim.lsp.protocol.DiagnosticSeverity.Error;
+            message = "Syntax error";
+          },
+        }
+        vim.api.nvim_win_set_buf(0, buffer)
+        vim.lsp.util.buf_diagnostics_save_positions(vim.fn.bufnr(buffer), diagnostics)
+        local popup_bufnr, winnr = vim.lsp.util.show_line_diagnostics()
+        return popup_bufnr
+      ]])
+    end)
+  end)
+  describe('lsp.util.symbols_to_items', function()
+    describe('convert DocumentSymbol[] to items', function()
+      it('DocumentSymbol has children', function()
+        local expected = {
+          {
+            col = 1,
+            filename = '',
+            kind = 'File',
+            lnum = 2,
+            text = '[File] TestA'
+          },
+          {
+            col = 1,
+            filename = '',
+            kind = 'Module',
+            lnum = 4,
+            text = '[Module] TestB'
+          },
+          {
+            col = 1,
+            filename = '',
+            kind = 'Namespace',
+            lnum = 6,
+            text = '[Namespace] TestC'
+          }
+        }
+        eq(expected, exec_lua [[
+          local doc_syms = {
+            {
+              deprecated = false,
+              detail = "A",
+              kind = 1,
+              name = "TestA",
+              range = {
+                start = {
+                  character = 0,
+                  line = 1
+                },
+                ["end"] = {
+                  character = 0,
+                  line = 2
+                }
+              },
+              selectionRange = {
+                start = {
+                  character = 0,
+                  line = 1
+                },
+                ["end"] = {
+                  character = 4,
+                  line = 1
+                }
+              },
+              children = {
+                {
+                  children = {},
+                  deprecated = false,
+                  detail = "B",
+                  kind = 2,
+                  name = "TestB",
+                  range = {
+                    start = {
+                      character = 0,
+                      line = 3
+                    },
+                    ["end"] = {
+                      character = 0,
+                      line = 4
+                    }
+                  },
+                  selectionRange = {
+                    start = {
+                      character = 0,
+                      line = 3
+                    },
+                    ["end"] = {
+                      character = 4,
+                      line = 3
+                    }
+                  }
+                }
+              }
+            },
+            {
+              deprecated = false,
+              detail = "C",
+              kind = 3,
+              name = "TestC",
+              range = {
+                start = {
+                  character = 0,
+                  line = 5
+                },
+                ["end"] = {
+                  character = 0,
+                  line = 6
+                }
+              },
+              selectionRange = {
+                start = {
+                  character = 0,
+                  line = 5
+                },
+                ["end"] = {
+                  character = 4,
+                  line = 5
+                }
+              }
+            }
+          }
+          return vim.lsp.util.symbols_to_items(doc_syms, nil)
+        ]])
+      end)
+      it('DocumentSymbol has no children', function()
+        local expected = {
+          {
+            col = 1,
+            filename = '',
+            kind = 'File',
+            lnum = 2,
+            text = '[File] TestA'
+          },
+          {
+            col = 1,
+            filename = '',
+            kind = 'Namespace',
+            lnum = 6,
+            text = '[Namespace] TestC'
+          }
+        }
+        eq(expected, exec_lua [[
+          local doc_syms = {
+            {
+              deprecated = false,
+              detail = "A",
+              kind = 1,
+              name = "TestA",
+              range = {
+                start = {
+                  character = 0,
+                  line = 1
+                },
+                ["end"] = {
+                  character = 0,
+                  line = 2
+                }
+              },
+              selectionRange = {
+                start = {
+                  character = 0,
+                  line = 1
+                },
+                ["end"] = {
+                  character = 4,
+                  line = 1
+                }
+              },
+            },
+            {
+              deprecated = false,
+              detail = "C",
+              kind = 3,
+              name = "TestC",
+              range = {
+                start = {
+                  character = 0,
+                  line = 5
+                },
+                ["end"] = {
+                  character = 0,
+                  line = 6
+                }
+              },
+              selectionRange = {
+                start = {
+                  character = 0,
+                  line = 5
+                },
+                ["end"] = {
+                  character = 4,
+                  line = 5
+                }
+              }
+            }
+          }
+          return vim.lsp.util.symbols_to_items(doc_syms, nil)
+        ]])
+      end)
+    end)
+    describe('convert SymbolInformation[] to items', function()
+        local expected = {
+          {
+            col = 1,
+            filename = 'test_a',
+            kind = 'File',
+            lnum = 2,
+            text = '[File] TestA'
+          },
+          {
+            col = 1,
+            filename = 'test_b',
+            kind = 'Module',
+            lnum = 4,
+            text = '[Module] TestB'
+          }
+        }
+        eq(expected, exec_lua [[
+          local sym_info = {
+            {
+              deprecated = false,
+              kind = 1,
+              name = "TestA",
+              location = {
+                range = {
+                  start = {
+                    character = 0,
+                    line = 1
+                  },
+                  ["end"] = {
+                    character = 0,
+                    line = 2
+                  }
+                },
+                uri = "file://test_a"
+              },
+              contanerName = "TestAContainer"
+            },
+            {
+              deprecated = false,
+              kind = 2,
+              name = "TestB",
+              location = {
+                range = {
+                  start = {
+                    character = 0,
+                    line = 3
+                  },
+                  ["end"] = {
+                    character = 0,
+                    line = 4
+                  }
+                },
+                uri = "file://test_b"
+              },
+              contanerName = "TestBContainer"
+            }
+          }
+          return vim.lsp.util.symbols_to_items(sym_info, nil)
+        ]])
+    end)
+  end)
+
+  describe('lsp.util._get_completion_item_kind_name', function()
+    describe('returns the name specified by protocol', function()
+      eq("Text", exec_lua("return vim.lsp.util._get_completion_item_kind_name(1)"))
+      eq("TypeParameter", exec_lua("return vim.lsp.util._get_completion_item_kind_name(25)"))
+    end)
+    describe('returns the name not specified by protocol', function()
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(nil)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(vim.NIL)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(1000)"))
+    end)
+  end)
+
+  describe('lsp.util._get_symbol_kind_name', function()
+    describe('returns the name specified by protocol', function()
+      eq("File", exec_lua("return vim.lsp.util._get_symbol_kind_name(1)"))
+      eq("TypeParameter", exec_lua("return vim.lsp.util._get_symbol_kind_name(26)"))
+    end)
+    describe('returns the name not specified by protocol', function()
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(nil)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(vim.NIL)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(1000)"))
     end)
   end)
 end)

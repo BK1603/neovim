@@ -1,4 +1,6 @@
 " Tests for diff mode
+source shared.vim
+source screendump.vim
 
 func Test_diff_fold_sync()
   enew!
@@ -67,7 +69,7 @@ func Common_vert_split()
   set foldmethod=marker foldcolumn=4
   call assert_equal(0, &diff)
   call assert_equal('marker', &foldmethod)
-  call assert_equal(4, &foldcolumn)
+  call assert_equal('4', &foldcolumn)
   call assert_equal(0, &scrollbind)
   call assert_equal(0, &cursorbind)
   call assert_equal(1, &wrap)
@@ -76,7 +78,7 @@ func Common_vert_split()
   vert diffsplit Xtest2
   call assert_equal(1, &diff)
   call assert_equal('diff', &foldmethod)
-  call assert_equal(2, &foldcolumn)
+  call assert_equal('2', &foldcolumn)
   call assert_equal(1, &scrollbind)
   call assert_equal(1, &cursorbind)
   call assert_equal(0, &wrap)
@@ -142,7 +144,7 @@ func Common_vert_split()
   1wincmd w
   call assert_equal(0, &diff)
   call assert_equal('marker', &foldmethod)
-  call assert_equal(4, &foldcolumn)
+  call assert_equal('4', &foldcolumn)
   call assert_equal(0, &scrollbind)
   call assert_equal(0, &cursorbind)
   call assert_equal(1, &wrap)
@@ -150,7 +152,7 @@ func Common_vert_split()
   wincmd w
   call assert_equal(0, &diff)
   call assert_equal('marker', &foldmethod)
-  call assert_equal(4, &foldcolumn)
+  call assert_equal('4', &foldcolumn)
   call assert_equal(0, &scrollbind)
   call assert_equal(0, &cursorbind)
   call assert_equal(1, &wrap)
@@ -158,7 +160,7 @@ func Common_vert_split()
   wincmd w
   call assert_equal(0, &diff)
   call assert_equal('marker', &foldmethod)
-  call assert_equal(4, &foldcolumn)
+  call assert_equal('4', &foldcolumn)
   call assert_equal(0, &scrollbind)
   call assert_equal(0, &cursorbind)
   call assert_equal(1, &wrap)

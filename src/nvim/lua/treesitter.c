@@ -93,10 +93,7 @@ static PMap(cstr_t) *langs;
 static void build_meta(lua_State *L, const char *tname, const luaL_Reg *meta)
 {
   if (luaL_newmetatable(L, tname)) {  // [meta]
-    for (size_t i = 0; meta[i].name != NULL; i++) {
-      lua_pushcfunction(L, meta[i].func);  // [meta, func]
-      lua_setfield(L, -2, meta[i].name);  // [meta]
-    }
+    luaL_register(L, NULL, meta);
 
     lua_pushvalue(L, -1);  // [meta, meta]
     lua_setfield(L, -2, "__index");  // [meta]
@@ -274,17 +271,22 @@ static const char *input_cb(void *payload, uint32_t byte_index,
   }
   char_u *line = ml_get_buf(bp, position.row+1, false);
   size_t len = STRLEN(line);
-  size_t tocopy = MIN(len-position.column, BUFSIZE);
 
-  memcpy(buf, line+position.column, tocopy);
-  // Translate embedded \n to NUL
-  memchrsub(buf, '\n', '\0', tocopy);
-  *bytes_read = (uint32_t)tocopy;
-  if (tocopy < BUFSIZE) {
-    // now add the final \n. If it didn't fit, input_cb will be called again
-    // on the same line with advanced column.
-    buf[tocopy] = '\n';
-    (*bytes_read)++;
+  if (position.column > len) {
+    *bytes_read = 0;
+  } else {
+    size_t tocopy = MIN(len-position.column, BUFSIZE);
+
+    memcpy(buf, line+position.column, tocopy);
+    // Translate embedded \n to NUL
+    memchrsub(buf, '\n', '\0', tocopy);
+    *bytes_read = (uint32_t)tocopy;
+    if (tocopy < BUFSIZE) {
+      // now add the final \n. If it didn't fit, input_cb will be called again
+      // on the same line with advanced column.
+      buf[tocopy] = '\n';
+      (*bytes_read)++;
+    }
   }
   return buf;
 #undef BUFSIZE

@@ -20,7 +20,7 @@
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
 #include "nvim/edit.h"
-#include "nvim/eval.h"
+#include "nvim/eval/userfunc.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
@@ -61,6 +61,11 @@
 
 #define BUFSIZE         8192    /* size of normal write buffer */
 #define SMBUFSIZE       256     /* size of emergency write buffer */
+
+// For compatibility with libuv < 1.20.0 (tested on 1.18.0)
+#ifndef UV_FS_COPYFILE_FICLONE
+#define UV_FS_COPYFILE_FICLONE 0
+#endif
 
 //
 // The autocommands are stored in a list for each event.
@@ -407,11 +412,27 @@ readfile(
 
     if (newfile) {
       if (apply_autocmds_exarg(EVENT_BUFREADCMD, NULL, sfname,
-              FALSE, curbuf, eap))
-        return aborting() ? FAIL : OK;
+                               false, curbuf, eap)) {
+        int status = OK;
+
+        if (aborting()) {
+          status = FAIL;
+        }
+
+        // The BufReadCmd code usually uses ":read" to get the text and
+        // perhaps ":file" to change the buffer name. But we should
+        // consider this to work like ":edit", thus reset the
+        // BF_NOTEDITED flag.  Then ":write" will work to overwrite the
+        // same file.
+        if (status == OK) {
+          curbuf->b_flags &= ~BF_NOTEDITED;
+        }
+        return status;
+      }
     } else if (apply_autocmds_exarg(EVENT_FILEREADCMD, sfname, sfname,
-                   FALSE, NULL, eap))
+                                    false, NULL, eap)) {
       return aborting() ? FAIL : OK;
+    }
 
     curbuf->b_op_start = pos;
   }

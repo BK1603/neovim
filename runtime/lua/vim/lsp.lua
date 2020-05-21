@@ -101,7 +101,7 @@ local function for_each_buffer_client(bufnr, callback)
   for client_id in pairs(client_ids) do
     local client = active_clients[client_id]
     if client then
-      callback(client, client_id)
+      callback(client, client_id, bufnr)
     end
   end
 end
@@ -198,6 +198,7 @@ local function text_document_did_open_handler(bufnr, client)
     }
   }
   client.notify('textDocument/didOpen', params)
+  util.buf_versions[bufnr] = params.textDocument.version
 end
 
 --- LSP client object.
@@ -520,23 +521,25 @@ function lsp.start_client(config)
   end
 
   --- Checks capabilities before rpc.request-ing.
-  function client.request(method, params, callback)
+  function client.request(method, params, callback, bufnr)
     if not callback then
       callback = resolve_callback(method)
         or error("not found: request callback for client "..client.name)
     end
-    local _ = log.debug() and log.debug(log_prefix, "client.request", client_id, method, params, callback)
+    local _ = log.debug() and log.debug(log_prefix, "client.request", client_id, method, params, callback, bufnr)
     -- TODO keep these checks or just let it go anyway?
     if (not client.resolved_capabilities.hover and method == 'textDocument/hover')
       or (not client.resolved_capabilities.signature_help and method == 'textDocument/signatureHelp')
       or (not client.resolved_capabilities.goto_definition and method == 'textDocument/definition')
       or (not client.resolved_capabilities.implementation and method == 'textDocument/implementation')
+      or (not client.resolved_capabilities.document_symbol and method == 'textDocument/documentSymbol')
+      or (not client.resolved_capabilities.workspace_symbol and method == 'textDocument/workspaceSymbol')
     then
-      callback(unsupported_method(method), method, nil, client_id)
+      callback(unsupported_method(method), method, nil, client_id, bufnr)
       return
     end
     return rpc.request(method, params, function(err, result)
-      callback(err, method, result, client_id)
+      callback(err, method, result, client_id, bufnr)
     end)
   end
 
@@ -613,6 +616,8 @@ do
     if tbl_isempty(all_buffer_active_clients[bufnr] or {}) then
       return
     end
+
+    util.buf_versions[bufnr] = changedtick
     -- Lazy initialize these because clients may not even need them.
     local incremental_changes = once(function(client)
       local size_index = encoding_index[client.offset_encoding]
@@ -719,6 +724,7 @@ function lsp.buf_attach_client(bufnr, client_id)
             client.notify('textDocument/didClose', params)
           end
         end)
+        util.buf_versions[bufnr] = nil
         all_buffer_active_clients[bufnr] = nil
       end;
       -- TODO if we know all of the potential clients ahead of time, then we
@@ -836,8 +842,8 @@ function lsp.buf_request(bufnr, method, params, callback)
     callback = { callback, 'f', true };
   }
   local client_request_ids = {}
-  for_each_buffer_client(bufnr, function(client, client_id)
-    local request_success, request_id = client.request(method, params, callback)
+  for_each_buffer_client(bufnr, function(client, client_id, resolved_bufnr)
+    local request_success, request_id = client.request(method, params, callback, resolved_bufnr)
 
     -- This could only fail if the client shut down in the time since we looked
     -- it up and we did the request, which should be rare.
@@ -893,21 +899,22 @@ function lsp.buf_request_sync(bufnr, method, params, timeout_ms)
   return request_results
 end
 
---- Sends a notification to all servers attached to the buffer.
----
---@param bufnr (optional, number) Buffer handle, or 0 for current
---@param method (string) LSP method name
---@param params (string) Parameters to send to the server
----
---@returns nil
+--- Send a notification to a server
+-- @param bufnr [number] (optional): The number of the buffer
+-- @param method [string]: Name of the request method
+-- @param params [string]: Arguments to send to the server
+--
+-- @returns true if any client returns true; false otherwise
 function lsp.buf_notify(bufnr, method, params)
   validate {
     bufnr    = { bufnr, 'n', true };
     method   = { method, 's' };
   }
-  for_each_buffer_client(bufnr, function(client, _client_id)
-    client.rpc.notify(method, params)
+  local resp = false
+  for_each_buffer_client(bufnr, function(client, _client_id, _resolved_bufnr)
+    if client.rpc.notify(method, params) then resp = true end
   end)
+  return resp
 end
 
 --- Implements 'omnifunc' compatible LSP completion.
@@ -1009,6 +1016,19 @@ end
 --- Gets the path of the logfile used by the LSP client.
 function lsp.get_log_path()
   return log.get_filename()
+end
+
+-- Define the LspDiagnostics signs if they're not defined already.
+do
+  local function define_default_sign(name, properties)
+    if vim.tbl_isempty(vim.fn.sign_getdefined(name)) then
+      vim.fn.sign_define(name, properties)
+    end
+  end
+  define_default_sign('LspDiagnosticsErrorSign', {text='E', texthl='LspDiagnosticsErrorSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsWarningSign', {text='W', texthl='LspDiagnosticsWarningSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsInformationSign', {text='I', texthl='LspDiagnosticsInformationSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsHintSign', {text='H', texthl='LspDiagnosticsHintSign', linehl='', numhl=''})
 end
 
 return lsp

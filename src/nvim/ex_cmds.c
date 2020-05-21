@@ -882,7 +882,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
     mark_adjust_nofold(line2 + 1, dest, -num_lines, 0L, kExtmarkNOOP);
     FOR_ALL_TAB_WINDOWS(tab, win) {
       if (win->w_buffer == curbuf) {
-        foldMoveRange(&win->w_folds, line1, line2, dest);
+        foldMoveRange(win, &win->w_folds, line1, line2, dest);
       }
     }
     curbuf->b_op_start.lnum = dest - num_lines + 1;
@@ -891,7 +891,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
     mark_adjust_nofold(dest + 1, line1 - 1, num_lines, 0L, kExtmarkNOOP);
     FOR_ALL_TAB_WINDOWS(tab, win) {
       if (win->w_buffer == curbuf) {
-        foldMoveRange(&win->w_folds, dest + 1, line1 - 1, line2);
+        foldMoveRange(win, &win->w_folds, dest + 1, line1 - 1, line2);
       }
     }
     curbuf->b_op_start.lnum = dest + 1;
@@ -2177,6 +2177,7 @@ int do_ecmd(
   int did_get_winopts = FALSE;
   int readfile_flags = 0;
   bool did_inc_redrawing_disabled = false;
+  long *so_ptr = curwin->w_p_so >= 0 ? &curwin->w_p_so : &p_so;
 
   if (eap != NULL)
     command = eap->do_ecmd_cmd;
@@ -2669,6 +2670,8 @@ int do_ecmd(
     msg_scrolled_ign = FALSE;
   }
 
+  curbuf->b_last_used = time(NULL);
+
   if (command != NULL)
     do_cmdline(command, NULL, NULL, DOCMD_VERBOSE);
 
@@ -2678,13 +2681,14 @@ int do_ecmd(
   RedrawingDisabled--;
   did_inc_redrawing_disabled = false;
   if (!skip_redraw) {
-    n = p_so;
-    if (topline == 0 && command == NULL)
-      p_so = 999;        // force cursor to be vertically centered in the window
+    n = *so_ptr;
+    if (topline == 0 && command == NULL) {
+      *so_ptr = 999;    // force cursor to be vertically centered in the window
+    }
     update_topline();
     curwin->w_scbind_pos = curwin->w_topline;
-    p_so = n;
-    redraw_curbuf_later(NOT_VALID);     /* redraw this buffer later */
+    *so_ptr = n;
+    redraw_curbuf_later(NOT_VALID);     // redraw this buffer later
   }
 
   if (p_im)
@@ -3008,18 +3012,18 @@ void ex_z(exarg_T *eap)
   ex_no_reprint = true;
 }
 
-/*
- * Check if the restricted flag is set.
- * If so, give an error message and return TRUE.
- * Otherwise, return FALSE.
- */
-int check_restricted(void)
+// Check if the restricted flag is set.
+// If so, give an error message and return true.
+// Otherwise, return false.
+bool check_restricted(void)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   if (restricted) {
-    EMSG(_("E145: Shell commands not allowed in restricted mode"));
-    return TRUE;
+    EMSG(_("E145: Shell commands and some functionality not allowed"
+           " in restricted mode"));
+    return true;
   }
-  return FALSE;
+  return false;
 }
 
 /*
@@ -4482,8 +4486,9 @@ prepare_tagpreview (
       curwin->w_p_wfh = TRUE;
       RESET_BINDING(curwin);                /* don't take over 'scrollbind'
                                                and 'cursorbind' */
-      curwin->w_p_diff = FALSE;             /* no 'diff' */
-      curwin->w_p_fdc = 0;                  /* no 'foldcolumn' */
+      curwin->w_p_diff = false;             // no 'diff'
+      set_string_option_direct((char_u *)"fdc", -1,     // no 'foldcolumn'
+                               (char_u *)"0", OPT_FREE, SID_NONE);
       return true;
     }
   }

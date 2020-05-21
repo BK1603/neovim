@@ -13,12 +13,11 @@ log.levels = {
   INFO  = 2;
   WARN  = 3;
   ERROR = 4;
-  -- FATAL = 4;
 }
 
 -- Default log level is warn.
 local current_log_level = log.levels.WARN
-local log_date_format = "%FT%H:%M:%SZ%z"
+local log_date_format = "%FT%H:%M:%S%z"
 
 do
   local path_sep = vim.loop.os_uname().sysname == "Windows" and "\\" or "/"

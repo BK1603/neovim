@@ -8,6 +8,9 @@ local vim = vim or {}
 
 --- Returns a deep copy of the given object. Non-table objects are copied as
 --- in a typical Lua assignment, whereas table objects are copied recursively.
+--- Functions are naively copied, so functions in the copied table point to the
+--- same functions as those in the input table. Userdata and threads are not
+--- copied and will throw an error.
 ---
 --@param orig Table to copy
 --@returns New table of copied keys and (nested) values.
@@ -34,10 +37,16 @@ vim.deepcopy = (function()
     string = _id,
     ['nil'] = _id,
     boolean = _id,
+    ['function'] = _id,
   }
 
   return function(orig)
-    return deepcopy_funcs[type(orig)](orig)
+    local f = deepcopy_funcs[type(orig)]
+    if f then
+      return f(orig)
+    else
+      error("Cannot deepcopy object of type "..type(orig))
+    end
   end
 end)()
 
@@ -191,16 +200,7 @@ function vim.tbl_isempty(t)
   return next(t) == nil
 end
 
---- Merges two or more map-like tables.
----
---@see |extend()|
----
---@param behavior Decides what to do if a key is found in more than one map:
----      - "error": raise an error
----      - "keep":  use value from the leftmost map
----      - "force": use value from the rightmost map
---@param ... Two or more map-like tables.
-function vim.tbl_extend(behavior, ...)
+local function tbl_extend(behavior, deep_extend, ...)
   if (behavior ~= 'error' and behavior ~= 'keep' and behavior ~= 'force') then
     error('invalid "behavior": '..tostring(behavior))
   end
@@ -219,7 +219,9 @@ function vim.tbl_extend(behavior, ...)
     vim.validate{["after the second argument"] = {tbl,'t'}}
     if tbl then
       for k, v in pairs(tbl) do
-        if behavior ~= 'force' and ret[k] ~= nil then
+        if type(v) == 'table' and deep_extend and not vim.tbl_islist(v) then
+          ret[k] = tbl_extend(behavior, true, ret[k] or vim.empty_dict(), v)
+        elseif behavior ~= 'force' and ret[k] ~= nil then
           if behavior == 'error' then
             error('key found in more than one map: '..k)
           end  -- Else behavior is "keep".
@@ -230,6 +232,32 @@ function vim.tbl_extend(behavior, ...)
     end
   end
   return ret
+end
+
+--- Merges two or more map-like tables.
+---
+--@see |extend()|
+---
+--@param behavior Decides what to do if a key is found in more than one map:
+---      - "error": raise an error
+---      - "keep":  use value from the leftmost map
+---      - "force": use value from the rightmost map
+--@param ... Two or more map-like tables.
+function vim.tbl_extend(behavior, ...)
+  return tbl_extend(behavior, false, ...)
+end
+
+--- Merges recursively two or more map-like tables.
+---
+--@see |tbl_extend()|
+---
+--@param behavior Decides what to do if a key is found in more than one map:
+---      - "error": raise an error
+---      - "keep":  use value from the leftmost map
+---      - "force": use value from the rightmost map
+--@param ... Two or more map-like tables.
+function vim.tbl_deep_extend(behavior, ...)
+  return tbl_extend(behavior, true, ...)
 end
 
 --- Deep compare values for equality
@@ -354,6 +382,24 @@ function vim.tbl_islist(t)
     end
     return getmetatable(t) ~= vim._empty_dict_mt
   end
+end
+
+--- Counts the number of non-nil values in table `t`.
+---
+--- <pre>
+--- vim.tbl_count({ a=1, b=2 }) => 2
+--- vim.tbl_count({ 1, 2 }) => 2
+--- </pre>
+---
+--@see https://github.com/Tieske/Penlight/blob/master/lua/pl/tablex.lua
+--@param Table
+--@returns Number that is the number of the value in table
+function vim.tbl_count(t)
+  vim.validate{t={t,'t'}}
+
+  local count = 0
+  for _ in pairs(t) do count = count + 1 end
+  return count
 end
 
 --- Trim whitespace (Lua pattern "%s") from both sides of a string.

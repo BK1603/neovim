@@ -633,8 +633,7 @@ function protocol.make_client_capabilities()
         dynamicRegistration = false;
         completionItem = {
 
-          -- TODO(tjdevries): Is it possible to implement this in plain lua?
-          snippetSupport = false;
+          snippetSupport = true;
           commitCharactersSupport = false;
           preselectSupport = false;
           deprecatedSupport = false;
@@ -922,6 +921,28 @@ function protocol.resolve_capabilities(server_capabilities)
     general_properties.code_action = false
   else
     error("The server sent invalid codeActionProvider")
+  end
+
+  if server_capabilities.declarationProvider == nil then
+    general_properties.declaration = false
+  elseif type(server_capabilities.declarationProvider) == 'boolean' then
+    general_properties.declaration = server_capabilities.declarationProvider
+  elseif type(server_capabilities.declarationProvider) == 'table' then
+    -- TODO: support more detailed declarationProvider options.
+    general_properties.declaration = false
+  else
+    error("The server sent invalid declarationProvider")
+  end
+
+  if server_capabilities.typeDefinitionProvider == nil then
+    general_properties.type_definition = false
+  elseif type(server_capabilities.typeDefinitionProvider) == 'boolean' then
+    general_properties.type_definition = server_capabilities.typeDefinitionProvider
+  elseif type(server_capabilities.typeDefinitionProvider) == 'table' then
+    -- TODO: support more detailed typeDefinitionProvider options.
+    general_properties.type_definition = false
+  else
+    error("The server sent invalid typeDefinitionProvider")
   end
 
   if server_capabilities.implementationProvider == nil then

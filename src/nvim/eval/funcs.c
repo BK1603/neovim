@@ -175,8 +175,8 @@ static int non_zero_arg(typval_T *argvars)
 {
   return ((argvars[0].v_type == VAR_NUMBER
            && argvars[0].vval.v_number != 0)
-          || (argvars[0].v_type == VAR_SPECIAL
-              && argvars[0].vval.v_special == kSpecialVarTrue)
+          || (argvars[0].v_type == VAR_BOOL
+              && argvars[0].vval.v_bool == kBoolVarTrue)
           || (argvars[0].v_type == VAR_STRING
               && argvars[0].vval.v_string != NULL
               && *argvars[0].vval.v_string != NUL));
@@ -1758,19 +1758,21 @@ static void f_empty(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       n = (tv_dict_len(argvars[0].vval.v_dict) == 0);
       break;
     }
-    case VAR_SPECIAL: {
-      // Using switch to get warning if SpecialVarValue receives more values.
-      switch (argvars[0].vval.v_special) {
-        case kSpecialVarTrue: {
+    case VAR_BOOL: {
+      switch (argvars[0].vval.v_bool) {
+        case kBoolVarTrue: {
           n = false;
           break;
         }
-        case kSpecialVarFalse:
-        case kSpecialVarNull: {
+        case kBoolVarFalse: {
           n = true;
           break;
         }
       }
+      break;
+    }
+    case VAR_SPECIAL: {
+      n = argvars[0].vval.v_special == kSpecialVarNull;
       break;
     }
     case VAR_UNKNOWN: {
@@ -5189,6 +5191,7 @@ static void f_len(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       break;
     }
     case VAR_UNKNOWN:
+    case VAR_BOOL:
     case VAR_SPECIAL:
     case VAR_FLOAT:
     case VAR_PARTIAL:
@@ -7243,7 +7246,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   uint8_t *save_sourcing_name, *save_autocmd_fname, *save_autocmd_match;
   linenr_T save_sourcing_lnum;
   int save_autocmd_bufnr;
-  void *save_funccalp;
+  funccal_entry_T funccal_entry;
 
   if (l_provider_call_nesting) {
     // If this is called from a provider function, restore the scope
@@ -7254,7 +7257,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     save_autocmd_fname = autocmd_fname;
     save_autocmd_match = autocmd_match;
     save_autocmd_bufnr = autocmd_bufnr;
-    save_funccalp = save_funccal();
+    save_funccal(&funccal_entry);
 
     current_sctx = provider_caller_scope.script_ctx;
     sourcing_name = provider_caller_scope.sourcing_name;
@@ -7262,7 +7265,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     autocmd_fname = provider_caller_scope.autocmd_fname;
     autocmd_match = provider_caller_scope.autocmd_match;
     autocmd_bufnr = provider_caller_scope.autocmd_bufnr;
-    restore_funccal(provider_caller_scope.funccalp);
+    set_current_funccal((funccall_T *)(provider_caller_scope.funccalp));
   }
 
 
@@ -7280,7 +7283,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     autocmd_fname = save_autocmd_fname;
     autocmd_match = save_autocmd_match;
     autocmd_bufnr = save_autocmd_bufnr;
-    restore_funccal(save_funccalp);
+    restore_funccal();
   }
 
   if (ERROR_SET(&err)) {
@@ -10808,20 +10811,8 @@ static void f_type(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     case VAR_LIST:   n = VAR_TYPE_LIST; break;
     case VAR_DICT:   n = VAR_TYPE_DICT; break;
     case VAR_FLOAT:  n = VAR_TYPE_FLOAT; break;
-    case VAR_SPECIAL: {
-      switch (argvars[0].vval.v_special) {
-        case kSpecialVarTrue:
-        case kSpecialVarFalse: {
-          n = VAR_TYPE_BOOL;
-          break;
-        }
-        case kSpecialVarNull: {
-          n = 7;
-          break;
-        }
-      }
-      break;
-    }
+    case VAR_BOOL:   n = VAR_TYPE_BOOL; break;
+    case VAR_SPECIAL:n = VAR_TYPE_SPECIAL; break;
     case VAR_UNKNOWN: {
       internal_error("f_type(UNKNOWN)");
       break;

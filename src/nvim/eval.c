@@ -213,8 +213,8 @@ static struct vimvar {
   VV(VV_ERRORS,         "errors",           VAR_LIST, 0),
   VV(VV_MSGPACK_TYPES,  "msgpack_types",    VAR_DICT, VV_RO),
   VV(VV_EVENT,          "event",            VAR_DICT, VV_RO),
-  VV(VV_FALSE,          "false",            VAR_SPECIAL, VV_RO),
-  VV(VV_TRUE,           "true",             VAR_SPECIAL, VV_RO),
+  VV(VV_FALSE,          "false",            VAR_BOOL, VV_RO),
+  VV(VV_TRUE,           "true",             VAR_BOOL, VV_RO),
   VV(VV_NULL,           "null",             VAR_SPECIAL, VV_RO),
   VV(VV__NULL_LIST,     "_null_list",       VAR_LIST, VV_RO),
   VV(VV__NULL_DICT,     "_null_dict",       VAR_DICT, VV_RO),
@@ -230,12 +230,14 @@ static struct vimvar {
   VV(VV_ECHOSPACE,      "echospace",        VAR_NUMBER, VV_RO),
   VV(VV_EXITING,        "exiting",          VAR_NUMBER, VV_RO),
   VV(VV_LUA,            "lua",              VAR_PARTIAL, VV_RO),
+  VV(VV_ARGV,           "argv",             VAR_LIST, VV_RO),
 };
 #undef VV
 
 // shorthand
 #define vv_type         vv_di.di_tv.v_type
 #define vv_nr           vv_di.di_tv.vval.v_number
+#define vv_bool         vv_di.di_tv.vval.v_bool
 #define vv_special      vv_di.di_tv.vval.v_special
 #define vv_float        vv_di.di_tv.vval.v_float
 #define vv_str          vv_di.di_tv.vval.v_string
@@ -387,8 +389,8 @@ void eval_init(void)
   set_vim_var_nr(VV_TYPE_FLOAT,  VAR_TYPE_FLOAT);
   set_vim_var_nr(VV_TYPE_BOOL,   VAR_TYPE_BOOL);
 
-  set_vim_var_special(VV_FALSE, kSpecialVarFalse);
-  set_vim_var_special(VV_TRUE, kSpecialVarTrue);
+  set_vim_var_bool(VV_FALSE, kBoolVarFalse);
+  set_vim_var_bool(VV_TRUE, kBoolVarTrue);
   set_vim_var_special(VV_NULL, kSpecialVarNull);
   set_vim_var_special(VV_EXITING, kSpecialVarNull);
 
@@ -443,7 +445,7 @@ void eval_clear(void)
   // unreferenced lists and dicts
   (void)garbage_collect(false);
 
-  // functions
+  // functions not garbage collected
   free_all_functions();
 }
 
@@ -872,17 +874,19 @@ char_u *eval_to_string(char_u *arg, char_u **nextcmd, int convert)
 char_u *eval_to_string_safe(char_u *arg, char_u **nextcmd, int use_sandbox)
 {
   char_u      *retval;
-  void        *save_funccalp;
+  funccal_entry_T funccal_entry;
 
-  save_funccalp = save_funccal();
-  if (use_sandbox)
-    ++sandbox;
-  ++textlock;
-  retval = eval_to_string(arg, nextcmd, FALSE);
-  if (use_sandbox)
-    --sandbox;
-  --textlock;
-  restore_funccal(save_funccalp);
+  save_funccal(&funccal_entry);
+  if (use_sandbox) {
+    sandbox++;
+  }
+  textlock++;
+  retval = eval_to_string(arg, nextcmd, false);
+  if (use_sandbox) {
+    sandbox--;
+  }
+  textlock--;
+  restore_funccal();
   return retval;
 }
 
@@ -1834,12 +1838,15 @@ static char_u *ex_let_one(char_u *arg, typval_T *const tv,
       int opt_type;
       long numval;
       char *stringval = NULL;
+      const char *s = NULL;
 
       const char c1 = *p;
       *p = NUL;
 
       varnumber_T n = tv_get_number(tv);
-      const char *s = tv_get_string_chk(tv);  // != NULL if number or string.
+      if (tv->v_type != VAR_BOOL && tv->v_type != VAR_SPECIAL) {
+        s = tv_get_string_chk(tv);  // != NULL if number or string.
+      }
       if (s != NULL && op != NULL && *op != '=') {
         opt_type = get_option_value(arg, &numval, (char_u **)&stringval,
                                     opt_flags);
@@ -1865,7 +1872,8 @@ static char_u *ex_let_one(char_u *arg, typval_T *const tv,
           }
         }
       }
-      if (s != NULL) {
+      if (s != NULL || tv->v_type == VAR_BOOL
+          || tv->v_type == VAR_SPECIAL) {
         set_option_value((const char *)arg, n, s, opt_flags);
         arg_end = (char_u *)p;
       }
@@ -4196,6 +4204,7 @@ eval_index(
       }
       return FAIL;
     }
+    case VAR_BOOL:
     case VAR_SPECIAL: {
       if (verbose) {
         EMSG(_("E909: Cannot index a special variable"));
@@ -4417,6 +4426,7 @@ eval_index(
         *rettv = var1;
         break;
       }
+      case VAR_BOOL:
       case VAR_SPECIAL:
       case VAR_FUNC:
       case VAR_FLOAT:
@@ -5025,7 +5035,7 @@ bool garbage_collect(bool testing)
 
     // 3. Check if any funccal can be freed now.
     //    This may call us back recursively.
-    did_free = did_free || free_unref_funccal(copyID, testing);
+    did_free = free_unref_funccal(copyID, testing) || did_free;
   } else if (p_verbose > 0) {
     verb_msg(_(
         "Not enough memory to set references, garbage collection aborted!"));
@@ -5270,6 +5280,7 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack,
       abort = set_ref_in_func(tv->vval.v_string, NULL, copyID);
       break;
     case VAR_UNKNOWN:
+    case VAR_BOOL:
     case VAR_SPECIAL:
     case VAR_FLOAT:
     case VAR_NUMBER:
@@ -5740,11 +5751,11 @@ int assert_bool(typval_T *argvars, bool is_true)
   if ((argvars[0].v_type != VAR_NUMBER
        || (tv_get_number_chk(&argvars[0], &error) == 0) == is_true
        || error)
-      && (argvars[0].v_type != VAR_SPECIAL
-          || (argvars[0].vval.v_special
-              != (SpecialVarValue) (is_true
-                                    ? kSpecialVarTrue
-                                    : kSpecialVarFalse)))) {
+      && (argvars[0].v_type != VAR_BOOL
+          || (argvars[0].vval.v_bool
+              != (BoolVarValue)(is_true
+                                ? kBoolVarTrue
+                                : kBoolVarFalse)))) {
     prepare_assert_error(&ga);
     fill_assert_error(&ga, &argvars[1],
                       (char_u *)(is_true ? "True" : "False"),
@@ -6117,7 +6128,7 @@ void common_function(typval_T *argvars, typval_T *rettv,
         if (tv_list_len(list) == 0) {
           arg_idx = 0;
         } else if (tv_list_len(list) > MAX_FUNC_ARGS) {
-          emsg_funcname((char *)e_toomanyarg, name);
+          emsg_funcname((char *)e_toomanyarg, s);
           xfree(name);
           goto theend;
         }
@@ -6751,6 +6762,7 @@ void mapblock_fill_dict(dict_T *const dict,
   }
   tv_dict_add_allocated_str(dict, S_LEN("lhs"), lhs);
   tv_dict_add_nr(dict, S_LEN("noremap"), noremap_value);
+  tv_dict_add_nr(dict, S_LEN("script"), mp->m_noremap == REMAP_SCRIPT ? 1 : 0);
   tv_dict_add_nr(dict, S_LEN("expr"),  mp->m_expr ? 1 : 0);
   tv_dict_add_nr(dict, S_LEN("silent"), mp->m_silent ? 1 : 0);
   tv_dict_add_nr(dict, S_LEN("sid"), (varnumber_T)mp->m_script_ctx.sc_sid);
@@ -8045,6 +8057,17 @@ void set_vim_var_nr(const VimVarIndex idx, const varnumber_T val)
   vimvars[idx].vv_nr = val;
 }
 
+/// Set boolean v: {true, false} to the given value
+///
+/// @param[in]  idx  Index of variable to set.
+/// @param[in]  val  Value to set to.
+void set_vim_var_bool(const VimVarIndex idx, const BoolVarValue val)
+{
+  tv_clear(&vimvars[idx].vv_tv);
+  vimvars[idx].vv_type = VAR_BOOL;
+  vimvars[idx].vv_bool = val;
+}
+
 /// Set special v: variable to the given value
 ///
 /// @param[in]  idx  Index of variable to set.
@@ -8106,6 +8129,23 @@ void set_vim_var_dict(const VimVarIndex idx, dict_T *const val)
     // Set readonly
     tv_dict_set_keys_readonly(val);
   }
+}
+
+/// Set the v:argv list.
+void set_argv_var(char **argv, int argc)
+{
+  list_T *l = tv_list_alloc(argc);
+  int i;
+
+  if (l == NULL) {
+    getout(1);
+  }
+  tv_list_set_lock(l, VAR_FIXED);
+  for (i = 0; i < argc; i++) {
+    tv_list_append_string(l, (const char *const)argv[i], -1);
+    TV_LIST_ITEM_TV(tv_list_last(l))->v_lock = VAR_FIXED;
+  }
+  set_vim_var_list(VV_ARGV, l);
 }
 
 /*
@@ -9122,6 +9162,7 @@ int var_item_copy(const vimconv_T *const conv,
   case VAR_FLOAT:
   case VAR_FUNC:
   case VAR_PARTIAL:
+  case VAR_BOOL:
   case VAR_SPECIAL:
     tv_copy(from, to);
     break;
@@ -9748,9 +9789,11 @@ const void *var_shada_iter(const void *const iter, const char **const name,
 
 void var_set_global(const char *const name, typval_T vartv)
 {
-  funccall_T *const saved_funccal = (funccall_T *)save_funccal();
+  funccal_entry_T funccall_entry;
+
+  save_funccal(&funccall_entry);
   set_var(name, strlen(name), &vartv, false);
-  restore_funccal(saved_funccal);
+  restore_funccal();
 }
 
 int store_session_globals(FILE *fd)
@@ -10306,8 +10349,10 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments)
     .autocmd_fname = autocmd_fname,
     .autocmd_match = autocmd_match,
     .autocmd_bufnr = autocmd_bufnr,
-    .funccalp = save_funccal()
+    .funccalp = (void *)get_current_funccal()
   };
+  funccal_entry_T funccal_entry;
+  save_funccal(&funccal_entry);
   provider_call_nesting++;
 
   typval_T argvars[3] = {
@@ -10334,7 +10379,7 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments)
 
   tv_list_unref(arguments);
   // Restore caller scope information
-  restore_funccal(provider_caller_scope.funccalp);
+  restore_funccal();
   provider_caller_scope = saved_provider_caller_scope;
   provider_call_nesting--;
   assert(provider_call_nesting >= 0);

@@ -6,6 +6,7 @@ local buf_lines = helpers.buf_lines
 local dedent = helpers.dedent
 local exec_lua = helpers.exec_lua
 local eq = helpers.eq
+local pcall_err = helpers.pcall_err
 local pesc = helpers.pesc
 local insert = helpers.insert
 local retry = helpers.retry
@@ -705,7 +706,6 @@ describe('LSP', function()
         end;
       }
     end)
-
   end)
 
   describe("parsing tests", function()
@@ -733,7 +733,23 @@ describe('LSP', function()
         end;
       }
     end)
+  end)
+  describe('lsp._cmd_parts test', function()
+    local function _cmd_parts(input)
+      return exec_lua([[
+        lsp = require('vim.lsp')
+        return lsp._cmd_parts(...)
+      ]], input)
+    end
+    it('should valid cmd argument', function()
+      eq(true, pcall(_cmd_parts, {"nvim"}))
+      eq(true, pcall(_cmd_parts, {"nvim", "--head"}))
+    end)
 
+    it('should invalid cmd argument', function()
+      eq('Error executing lua: .../shared.lua: cmd: expected list, got nvim', pcall_err(_cmd_parts, "nvim"))
+      eq('Error executing lua: .../shared.lua: cmd argument: expected string, got number', pcall_err(_cmd_parts, {"nvim", 1}))
+    end)
   end)
 end)
 
@@ -784,13 +800,14 @@ describe('LSP', function()
         make_edit(0, 0, 0, 0, {"123"});
         make_edit(1, 0, 1, 1, {"2"});
         make_edit(2, 0, 2, 2, {"3"});
+        make_edit(3, 2, 3, 4, {""});
       }
       exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
       eq({
         '123First line of text';
         '2econd line of text';
         '3ird line of text';
-        'Fourth line of text';
+        'Foth line of text';
         'å å ɧ 汉语 ↥ 🤦 🦄';
       }, buf_lines(1))
     end)
@@ -957,7 +974,14 @@ describe('LSP', function()
         { label='foocar', insertText='foobar', textEdit={} },
         -- resolves into textEdit.newText
         { label='foocar', insertText='foodar', textEdit={newText='foobar'} },
-        { label='foocar', textEdit={newText='foobar'} }
+        { label='foocar', textEdit={newText='foobar'} },
+        -- real-world snippet text
+        { label='foocar', insertText='foodar', textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} },
+        { label='foocar', insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', textEdit={} },
+        -- nested snippet tokens
+        { label='foocar', insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', textEdit={} },
+        -- plain text
+        { label='foocar', insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} },
       }
       local completion_list_items = {items=completion_list}
       local expected = {
@@ -967,6 +991,10 @@ describe('LSP', function()
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar', textEdit={} } } } } },
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar'} } } } } },
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar(place holder, more ...holder{})', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ1, var2 *typ2) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ2,typ3 tail) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(${1:var1})', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} } } } } },
       }
 
       eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
@@ -1289,5 +1317,76 @@ describe('LSP', function()
       eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(vim.NIL)"))
       eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(1000)"))
     end)
+  end)
+
+  describe('lsp.util.jump_to_location', function()
+    local target_bufnr
+
+    before_each(function()
+      target_bufnr = exec_lua [[
+        local bufnr = vim.uri_to_bufnr("file://fake/uri")
+        local lines = {"1st line of text", "å å ɧ 汉语 ↥ 🤦 🦄"}
+        vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
+        return bufnr
+      ]]
+    end)
+
+    local location = function(start_line, start_char, end_line, end_char)
+      return {
+        uri = "file://fake/uri",
+        range = {
+          start = { line = start_line, character = start_char },
+          ["end"] = { line = end_line, character = end_char },
+        },
+      }
+    end
+
+    local jump = function(msg)
+      eq(true, exec_lua('return vim.lsp.util.jump_to_location(...)', msg))
+      eq(target_bufnr, exec_lua[[return vim.fn.bufnr('%')]])
+      return {
+        line = exec_lua[[return vim.fn.line('.')]],
+        col = exec_lua[[return vim.fn.col('.')]],
+      }
+    end
+
+    it('jumps to a Location', function()
+      local pos = jump(location(0, 9, 0, 9))
+      eq(1, pos.line)
+      eq(10, pos.col)
+    end)
+
+    it('jumps to a LocationLink', function()
+      local pos = jump({
+          targetUri = "file://fake/uri",
+          targetSelectionRange = {
+            start = { line = 0, character = 4 },
+            ["end"] = { line = 0, character = 4 },
+          },
+          targetRange = {
+            start = { line = 1, character = 5 },
+            ["end"] = { line = 1, character = 5 },
+          },
+        })
+      eq(1, pos.line)
+      eq(5, pos.col)
+    end)
+
+    it('jumps to the correct multibyte column', function()
+      local pos = jump(location(1, 2, 1, 2))
+      eq(2, pos.line)
+      eq(4, pos.col)
+      eq('å', exec_lua[[return vim.fn.expand('<cword>')]])
+    end)
+  end)
+
+  describe('lsp.util._make_floating_popup_size', function()
+    exec_lua [[ contents =
+    {"text tαxt txtα tex",
+    "text tααt tααt text",
+    "text tαxt tαxt"}
+    ]]
+    eq({19,3}, exec_lua[[ return {vim.lsp.util._make_floating_popup_size(contents)} ]])
+    eq({15,5}, exec_lua[[ return {vim.lsp.util._make_floating_popup_size(contents,{width = 15, wrap_at = 14})} ]])
   end)
 end)

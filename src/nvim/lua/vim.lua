@@ -297,6 +297,7 @@ local function __index(t, key)
     return t.highlight
   elseif key == 'autoread' then
     t.autoread = require('vim.fswatch.autoread')
+    return t.autoread
   end
 end
 

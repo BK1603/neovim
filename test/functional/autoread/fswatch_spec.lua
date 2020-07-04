@@ -1,13 +1,16 @@
 local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
+local lfs = require('lfs')
 local command = helpers.command
 local insert = helpers.insert
 local clear = helpers.clear
 local feed = helpers.feed
+local eval = helpers.eval
 
 describe('Autoread', function()
   it('filewatcher generate prompt', function()
-    clear({env = {VIMRUNTIME='~/Work/fswatch-autoread/runtime'}})
+    print(eval('$PROJECT_SOURCE_DIR'))
+    clear({env = {VIMRUNTIME='$PROJECT_SOURCE_DIR/runtime'}})
     local path = 'Xtest-foo'
     helpers.write_file(path, '')
 
@@ -27,7 +30,7 @@ describe('Autoread', function()
     ]]
 
     helpers.write_file(path, expected_additions)
-    command('call autoread#PromptReload()')
+    command('call fswatch#PromptReload()')
     screen:snapshot_util()
     feed([[y]])
     command('redraw')

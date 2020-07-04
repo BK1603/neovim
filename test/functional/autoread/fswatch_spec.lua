@@ -9,8 +9,6 @@ local eval = helpers.eval
 
 describe('Autoread', function()
   it('filewatcher generate prompt', function()
-    print(eval('$PROJECT_SOURCE_DIR'))
-    clear({env = {VIMRUNTIME='$PROJECT_SOURCE_DIR/runtime'}})
     local path = 'Xtest-foo'
     helpers.write_file(path, '')
 

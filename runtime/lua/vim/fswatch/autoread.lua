@@ -25,7 +25,7 @@ function check_notifications()
   for f, watcher in pairs(WatcherList) do
     if watcher.pending_notifs and watcher.paused == false then
       if uv.fs_stat(watcher.ffname) ~= nil then
-        vim.api.nvim_command('call PromptReload()')
+        vim.api.nvim_command('call autoread#PromptReload()')
       else
         print("ERR: File "..watcher.fname.." removed")
       end

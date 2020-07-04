@@ -5,20 +5,47 @@ local command = helpers.command
 local insert = helpers.insert
 local clear = helpers.clear
 local feed = helpers.feed
-local eval = helpers.eval
+local nvim_async = helpers.nvim_async
 
 describe('Autoread', function()
+  local screen
+
+  before_each(function()
+    clear()
+    screen = Screen.new(45, 10)
+    screen:attach()
+    screen:set_default_attr_ids({
+      EOB={bold = true, foreground = Screen.colors.Blue1},
+      T={foreground=Screen.colors.Red},
+      RBP1={background=Screen.colors.Red},
+      RBP2={background=Screen.colors.Yellow},
+      RBP3={background=Screen.colors.Green},
+      RBP4={background=Screen.colors.Blue},
+      SEP={bold = true, reverse = true},
+      CONFIRM={bold = true, foreground = Screen.colors.SeaGreen4},
+    })
+  end)
+
   it('filewatcher generate prompt', function()
     local path = 'Xtest-foo'
     helpers.write_file(path, '')
 
-    local screen = Screen.new(3, 8)
-    screen:attach()
-
-    command('edit! '..path)
+    command('edit '..path)
     insert([[aa bb]])
     command('write')
     screen:snapshot_util()
+    screen:expect{grid=[[
+      aa b^b                                        |
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      "Xtest-foo" 1L, 6C written                   |
+    ]]}
 
     local expected_additions = [[
     line 1
@@ -28,9 +55,20 @@ describe('Autoread', function()
     ]]
 
     helpers.write_file(path, expected_additions)
-    command('call fswatch#PromptReload()')
-    screen:snapshot_util()
-    feed([[y]])
+    -- nvim_async('command', 'call fswatch#PromptReload()')
+    screen:expect{grid=[[
+      aa bb                                        |
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {SEP:                                             }|
+      "Xtest-foo" 1L, 6C written                   |
+      {CONFIRM:File changed. Would you like to reload?}      |
+      {CONFIRM:[Y]es, (N)o: }^                                |
+    ]]}
+    feed([[<cr>]])
     command('redraw')
   end)
 end)

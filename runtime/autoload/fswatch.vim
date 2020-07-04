@@ -21,6 +21,7 @@ function! fswatch#PrintWatchers()
 endfunction
 
 function! fswatch#watch_file(fname)
+  echo 'Watching '.a:fname
   call luaeval("vim.fswatch.watch(_A)", a:fname)
 endfunction
 

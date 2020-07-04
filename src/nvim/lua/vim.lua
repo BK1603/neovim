@@ -295,9 +295,9 @@ local function __index(t, key)
   elseif key == 'highlight' then
     t.highlight = require('vim.highlight')
     return t.highlight
-  elseif key == 'autoread' then
-    t.autoread = require('vim.fswatch.autoread')
-    return t.autoread
+  elseif key == 'fswatch' then
+    t.fswatch = require('vim.fswatch.fswatch')
+    return t.fswatch
   end
 end
 

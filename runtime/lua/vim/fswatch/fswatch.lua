@@ -73,7 +73,7 @@ function Watcher.on_change(err, fname, event)
   WatcherList[fname]:start()
 end
 
-function Watcher.watch(fname)
+function Watcher.start_watch(fname)
   -- since we can only get file name from callback, use only the file
   -- name for storing in table. (Without the rest of the path.)
   local f = vim.api.nvim_call_function('fnamemodify', {fname, ':t'})

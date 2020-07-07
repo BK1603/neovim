@@ -7,13 +7,7 @@
 
 local uv = vim.loop
 
-local Watcher = {
-  fname = '',
-  ffname = '',
-  handle = nil,
-  paused = false,
-  pending_notifs = false,
-}
+local Watcher = {}
 local WatcherList = {}
 
 -- idle handle to check for any pending notifications in a watcher.
@@ -41,7 +35,7 @@ function Watcher:new(fname)
   assert(fname ~= '', 'Watcher.new: Error: fname is an empty string')
   -- get full path name for the file
   local ffname = vim.api.nvim_call_function('fnamemodify', {fname, ':p'})
-  w = {fname = fname, ffname = ffname, handle = nil}
+  w = {fname = fname, ffname = ffname, handle = nil, paused = false, pending_notifs = false}
   setmetatable(w, self)
   self.__index = self
   return w
@@ -90,18 +84,7 @@ function Watcher.start_watch(fname)
 end
 
 function Watcher.stop_watch(fname)
-  -- Do nothing if we opened a doc file. For some reason doc files never
-  -- trigger any event that could start a watcher, and trigger both BufDelete
-  -- and BufUnload. This causes us to close watchers that weren't even there
-  -- in the first place. We ignore help files here.
-  -- TODO: Is there way of getting buftype from the nvim api?
-  if starts_with(fname, '/usr/local/share/nvim/runtime/doc') then
-    return
-  end
-  local f = vim.api.nvim_call_function('fnamemodify', {fname, ':t'})
-
   if WatcherList[f] == nil then
-    print("No watcher for "..fname)
     return
   end
 

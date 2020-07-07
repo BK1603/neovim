@@ -5,8 +5,8 @@ endif
 let s:save_cpo = &cpo " save user coptions
 set cpo&vim " reset them to vim defaults
 
-command! -nargs=1 Watch call luaeval('vim.fswatch.start_watch(_A)', expand('<args>'))
-command! -nargs=1 Stop call luaeval('vim.fswatch.stop_watch(_A)', expand('<args>'))
+command! -nargs=1 Watch call v:lua.vim.fswatch.start_watch(expand('<args>'))
+command! -nargs=1 Stop call v:lua.vim.fswatch.start_watch(expand('<args>'))
 
 " function to prompt the user for a reload
 function! fswatch#PromptReload()

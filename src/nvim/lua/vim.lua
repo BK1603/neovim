@@ -296,7 +296,7 @@ local function __index(t, key)
     t.highlight = require('vim.highlight')
     return t.highlight
   elseif key == 'fswatch' then
-    t.fswatch = require('vim.fswatch.fswatch')
+    t.fswatch = require('vim.fswatch')
     return t.fswatch
   end
 end

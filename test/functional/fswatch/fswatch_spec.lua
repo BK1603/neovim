@@ -115,11 +115,56 @@ describe('Autoread', function()
     command('redraw')
   end)
 
-  it('filewatcher generate prompt writebackup: off', function()
+  it('filewatcher generate prompt backupcopy: yes', function()
     local path = 'Xtest-foo'
     helpers.write_file(path, '')
 
     command('set nowritebackup')
+    command('edit '..path)
+    insert([[aa bb]])
+    command('write')
+    screen:expect{grid=[[
+      aa b^b                                        |
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      "Xtest-foo" 1L, 6C written                   |
+    ]]}
+
+    local expected_additions = [[
+    line 1
+    line 2
+    line 3
+    line 4
+    ]]
+
+    helpers.write_file(path, expected_additions)
+    screen:expect{grid=[[
+      aa bb                                        |
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {EOB:~                                            }|
+      {SEP:                                             }|
+      "Xtest-foo" 1L, 6C written                   |
+      {CONFIRM:File changed. Would you like to reload?}      |
+      {CONFIRM:[Y]es, (N)o: }^                                |
+    ]]}
+    feed([[<cr>]])
+    command('redraw')
+  end)
+
+  it('filewatcher generate prompt writebackup: off', function()
+    local path = 'Xtest-foo'
+    helpers.write_file(path, '')
+
+    command('set backupcopy=yes')
     command('edit '..path)
     insert([[aa bb]])
     command('write')

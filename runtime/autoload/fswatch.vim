@@ -9,10 +9,10 @@ command! -nargs=1 Watch call v:lua.vim.fswatch.start_watch(expand('<args>'))
 command! -nargs=1 Stop call v:lua.vim.fswatch.start_watch(expand('<args>'))
 
 " function to prompt the user for a reload
-function! fswatch#PromptReload()
+function! fswatch#PromptReload(file)
   let choice = confirm("File changed. Would you like to reload?", "&Yes\n&Show diff\n&No", 1)
   if choice == 1
-    edit!
+    execute 'checktime '.a:file
   elseif choice == 2
     call fswatch#DiffOrig()
   endif

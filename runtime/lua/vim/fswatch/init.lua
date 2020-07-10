@@ -10,11 +10,11 @@ local uv = vim.loop
 local Watcher = {}
 local WatcherList = {}
 
--- idle handle to check for any pending notifications in a watcher.
+-- check handle to check for any pending notifications in a watcher.
 -- Only displays the notifications if neovim is in focus, and the buffer
 -- is the current buffer.
 
--- Callback for the idle handle
+-- Callback for the check handle
 function check_notifications()
   for f, watcher in pairs(WatcherList) do
     if watcher.pending_notifs and watcher.paused == false then
@@ -46,7 +46,9 @@ function Watcher:start()
   assert(self.ffname ~= '', 'Watcher.start: Error: full path for file not available')
   -- get a new handle
   self.handle = uv.new_fs_event()
-  self.handle:start(self.ffname, {}, self.on_change)
+  self.handle:start(self.ffname, {}, function(...)
+    self:on_change(...)
+  end)
 end
 
 function Watcher:stop()
@@ -60,35 +62,30 @@ function Watcher:stop()
   self.handle:close()
 end
 
-function Watcher.on_change(err, fname, event)
-  WatcherList[fname].pending_notifs = true
+function Watcher:on_change(err, fname, event)
+  self.pending_notifs = true
 
-  WatcherList[fname]:stop()
-  WatcherList[fname]:start()
+  self:stop()
+  self:start()
 end
 
 function Watcher.start_watch(fname)
-  -- since we can only get file name from callback, use only the file
-  -- name for storing in table. (Without the rest of the path.)
-  local f = vim.api.nvim_call_function('fnamemodify', {fname, ':t'})
-
   -- if a watcher already exists, close it.
-  if WatcherList[f] ~= nil then
-    WatcherList[f]:stop()
+  if WatcherList[fname] ~= nil then
+    WatcherList[fname]:stop()
   end
 
   -- create a new watcher and it to the watcher list.
-  local w = Watcher:new(fname)
-  WatcherList[f] = w
-  w:start()
+  WatcherList[fname] = Watcher:new(fname)
+  WatcherList[fname]:start()
 end
 
 function Watcher.stop_watch(fname)
-  if WatcherList[f] == nil then
+  if WatcherList[fname] == nil then
     return
   end
 
-  WatcherList[f]:stop()
+  WatcherList[fname]:stop()
 end
 
 function Watcher:pause_notif()

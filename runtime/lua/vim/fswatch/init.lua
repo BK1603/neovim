@@ -30,11 +30,11 @@ function check_notifications()
         elseif option == 'always' then
           vim.api.nvim_set_current_buf(watcher.bufnr)
           vim.api.nvim_command('call fswatch#PromptReload("'..watcher.bufnr..'")')
-        -- if editing check if the buffer is currently active and notify else update
+        -- if changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
           -- if buffer was changed notify
-          if watcher.buf_changed then
-            print('bello')
+          local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
+          if modified == 'modified' then
             vim.api.nvim_command('call fswatch#PromptReload("'..watcher.bufnr..'")')
           -- else update
           else
@@ -58,10 +58,9 @@ function Watcher:new(fname)
   assert(fname ~= '', 'Watcher.new: Error: fname is an empty string')
   -- get full path name for the file
   local ffname = vim.api.nvim_call_function('fnamemodify', {fname, ':p'})
-  w = {bufnr = vim.api.nvim_call_function('bufnr', {fname}), 
-       fname = fname, ffname = ffname, handle = nil, 
-       paused = false, pending_notifs = false, 
-       buf_changed = false}
+  w = {bufnr = vim.api.nvim_call_function('bufnr', {fname}),
+       fname = fname, ffname = ffname, handle = nil,
+       paused = false, pending_notifs = false,}
   setmetatable(w, self)
   self.__index = self
   return w
@@ -71,7 +70,6 @@ function Watcher:start()
   assert(self.fname ~= '', 'Watcher.start: Error: no file to watch')
   assert(self.ffname ~= '', 'Watcher.start: Error: full path for file not available')
   -- get a new handle
-  self.buf_changed = false
   self.handle = uv.new_fs_event()
   self.handle:start(self.ffname, {}, function(...)
     self:on_change(...)
@@ -145,7 +143,4 @@ function Watcher.print_all()
   end
 end
 
-function Watcher.set_changed(fname)
-  WatcherList[fname].buf_changed = true
-end
 return Watcher

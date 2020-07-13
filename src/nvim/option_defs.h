@@ -750,6 +750,7 @@ enum {
   , BV_FIXEOL
   , BV_EP
   , BV_ET
+  , BV_FCNOTIFY
   , BV_FENC
   , BV_FP
   , BV_BEXPR

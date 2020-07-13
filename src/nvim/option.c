@@ -141,6 +141,7 @@ static char_u   *p_tfu;
 static int p_eol;
 static int p_fixeol;
 static int p_et;
+static char_u   *p_fcnotify;
 static char_u   *p_fenc;
 static char_u   *p_ff;
 static char_u   *p_fo;
@@ -2304,6 +2305,7 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_lw);
   check_string_option(&buf->b_p_bkc);
   check_string_option(&buf->b_p_menc);
+  check_string_option(&buf->b_p_fcnotify);
 }
 
 /// Free the string allocated for an option.
@@ -5849,6 +5851,7 @@ static char_u *get_varp(vimoption_T *p)
   case PV_EOL:    return (char_u *)&(curbuf->b_p_eol);
   case PV_FIXEOL: return (char_u *)&(curbuf->b_p_fixeol);
   case PV_ET:     return (char_u *)&(curbuf->b_p_et);
+  case PV_FCNOTIFY:return (char_u *)&(curbuf->b_p_fcnotify);
   case PV_FENC:   return (char_u *)&(curbuf->b_p_fenc);
   case PV_FF:     return (char_u *)&(curbuf->b_p_ff);
   case PV_FT:     return (char_u *)&(curbuf->b_p_ft);
@@ -6133,6 +6136,7 @@ void buf_copy_options(buf_T *buf, int flags)
       buf->b_p_cfu = vim_strsave(p_cfu);
       buf->b_p_ofu = vim_strsave(p_ofu);
       buf->b_p_tfu = vim_strsave(p_tfu);
+      buf->b_p_fcnotify = vim_strsave(p_fcnotify);
       buf->b_p_sts = p_sts;
       buf->b_p_sts_nopaste = p_sts_nopaste;
       buf->b_p_com = vim_strsave(p_com);

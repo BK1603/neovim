@@ -746,6 +746,14 @@ return {
       defaults={if_true={vi=false}}
     },
     {
+      full_name='filechangenotify', abbreviation='fcnotify',
+      type='string', scope={'buffer'},
+      vi_def=true,
+      alloced=true,
+      varname='p_fcnotify',
+      defaults={if_true={vi="changed"}}
+    },
+    {
       full_name='fileencoding', abbreviation='fenc',
       type='string', scope={'buffer'},
       no_mkrc=true,

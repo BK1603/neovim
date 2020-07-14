@@ -40,7 +40,7 @@ function check_notifications()
             vim.api.nvim_command('call fswatch#Reload("'..watcher.bufnr..'")')
           end
         else
-          -- we didn't react to the notification, remark it as pending
+          -- we didn't react to the notification, re-mark it as pending
           watcher.pending_notifs = true
         end
       else
@@ -105,8 +105,16 @@ function Watcher.start_watch(fname)
 end
 
 function Watcher.stop_watch(fname)
+  -- can't close watchers for certain buffers
+  local bufnr = vim.api.nvim_call_function('bufnr', {fname})
+  local buflisted = vim.api.nvim_buf_get_option(bufnr, 'buflisted')
+  if not buflisted then
+    return
+  end
+
+  -- shouldn't happen
   if WatcherList[fname] == nil then
-    print(fname..'not exists')
+    print(fname..' not exists')
     return
   end
 
@@ -127,12 +135,6 @@ end
 
 function Watcher.resume_notif_all()
   check_handle:start(vim.schedule_wrap(check_notifications))
-end
-
-function starts_with(str, start)
-  assert(type(str) == 'string' and type(start) == 'string',
-         'starts_with:Err: string arguments expected')
-  return str:sub(1, #start) == start
 end
 
 function Watcher.print_all()

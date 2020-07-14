@@ -1,7 +1,5 @@
 " autocommands for starting filesystem based file watcher
 
-echom 'Loaded file watcher'
-
 augroup fswatch
   autocmd!
   au BufRead,BufWritePost * call v:lua.vim.fswatch.start_watch(expand('<afile>'))

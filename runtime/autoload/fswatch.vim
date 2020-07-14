@@ -10,13 +10,22 @@ command! -nargs=1 Stop call v:lua.vim.fswatch.start_watch(expand('<args>'))
 
 " function to prompt the user for a reload
 function! fswatch#PromptReload(buf)
-  execute 'sb '.a:buf
-  let choice = confirm("File changed. Would you like to reload?","&Yes\n&Show diff\n&No", 1)
+  let choice = confirm("File ".bufname(a:buf)." changed. Would you like to reload?","&Yes\n&Show diff\n&No", 1)
   if choice == 1
-    execute 'checktime '.a:buf
+    call fswatch#Reload(a:buf)
   elseif choice == 2
     call fswatch#DiffOrig()
   endif
+endfunction
+
+" function to reload the buffer
+function! fswatch#Reload(buf)
+  let s:save_swb = &switchbuf
+  execute 'set switchbuf=usetab'
+  execute 'sb '.a:buf
+  execute 'set switchbuf='.s:save_swb
+  edit!
+  unlet s:save_swb
 endfunction
 
 " function display the diff between the current buffer and original file

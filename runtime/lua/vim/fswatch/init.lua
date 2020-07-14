@@ -25,20 +25,19 @@ function check_notifications()
 
         -- if never just update
         if option == 'never' then
-          vim.api.nvim_command('checktime '..watcher.bufnr)
+          vim.api.nvim_command('call fswatch#Reload("'..watcher.bufnr..'")')
         -- if always notify then update
         elseif option == 'always' then
-          vim.api.nvim_set_current_buf(watcher.bufnr)
           vim.api.nvim_command('call fswatch#PromptReload("'..watcher.bufnr..'")')
         -- if changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
           -- if buffer was changed notify
           local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
-          if modified == 'modified' then
+          if modified then
             vim.api.nvim_command('call fswatch#PromptReload("'..watcher.bufnr..'")')
           -- else update
           else
-            vim.api.nvim_command('checktime '..watcher.bufnr)
+            vim.api.nvim_command('call fswatch#Reload("'..watcher.bufnr..'")')
           end
         else
           -- we didn't react to the notification, remark it as pending

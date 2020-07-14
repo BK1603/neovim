@@ -14,18 +14,18 @@ function! fswatch#PromptReload(buf)
   if choice == 1
     call fswatch#Reload(a:buf)
   elseif choice == 2
+    let s:save_swb = &switchbuf
+    execute 'set switchbuf=usetab'
+    execute 'sb '.a:buf
     call fswatch#DiffOrig()
+    execute 'set switchbuf='.s:save_swb
+    unlet s:save_swb
   endif
 endfunction
 
 " function to reload the buffer
 function! fswatch#Reload(buf)
-  let s:save_swb = &switchbuf
-  execute 'set switchbuf=usetab'
-  execute 'sb '.a:buf
-  execute 'set switchbuf='.s:save_swb
-  edit!
-  unlet s:save_swb
+  execute 'silent checktime '.a:buf
 endfunction
 
 " function display the diff between the current buffer and original file

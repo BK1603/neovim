@@ -3084,28 +3084,29 @@ fileinfo(
   }
 
   vim_snprintf_add((char *)buffer, IOSIZE, "\"%s%s%s%s%s%s",
-      curbufIsChanged() ? (shortmess(SHM_MOD)
-                           ?  " [+]" : _(" [Modified]")) : " ",
-      (curbuf->b_flags & BF_NOTEDITED)
-      && !bt_dontwrite(curbuf)
-      ? _("[Not edited]") : "",
-      (curbuf->b_flags & BF_NEW)
-      && !bt_dontwrite(curbuf)
-      ? _("[New file]") : "",
-      (curbuf->b_flags & BF_READERR) ? _("[Read errors]") : "",
-      curbuf->b_p_ro ? (shortmess(SHM_RO) ? _("[RO]")
-                        : _("[readonly]")) : "",
-      (curbufIsChanged() || (curbuf->b_flags & BF_WRITE_MASK)
-       || curbuf->b_p_ro) ?
-      " " : "");
-  /* With 32 bit longs and more than 21,474,836 lines multiplying by 100
-   * causes an overflow, thus for large numbers divide instead. */
-  if (curwin->w_cursor.lnum > 1000000L)
+                   curbufIsChanged()
+                   ? (shortmess(SHM_MOD) ?  " [+]" : _(" [Modified]")) : " ",
+                   (curbuf->b_flags & BF_NOTEDITED) && !bt_dontwrite(curbuf)
+                   ? _("[Not edited]") : "",
+                   (curbuf->b_flags & BF_NEW) && !bt_dontwrite(curbuf)
+                   ? new_file_message() : "",
+                   (curbuf->b_flags & BF_READERR)
+                   ? _("[Read errors]") : "",
+                   curbuf->b_p_ro
+                   ? (shortmess(SHM_RO) ? _("[RO]") : _("[readonly]")) : "",
+                   (curbufIsChanged()
+                    || (curbuf->b_flags & BF_WRITE_MASK)
+                    || curbuf->b_p_ro)
+                   ? " " : "");
+  // With 32 bit longs and more than 21,474,836 lines multiplying by 100
+  // causes an overflow, thus for large numbers divide instead.
+  if (curwin->w_cursor.lnum > 1000000L) {
     n = (int)(((long)curwin->w_cursor.lnum) /
               ((long)curbuf->b_ml.ml_line_count / 100L));
-  else
+  } else {
     n = (int)(((long)curwin->w_cursor.lnum * 100L) /
               (long)curbuf->b_ml.ml_line_count);
+  }
   if (curbuf->b_ml.ml_flags & ML_EMPTY) {
     vim_snprintf_add((char *)buffer, IOSIZE, "%s", _(no_lines_msg));
   } else if (p_ru) {
@@ -3463,7 +3464,8 @@ int build_stl_str_hl(
     } type;
   } items[STL_MAX_ITEM];
 #define TMPLEN 70
-  char_u tmp[TMPLEN];
+  char_u buf_tmp[TMPLEN];
+  char_u win_tmp[TMPLEN];
   char_u      *usefmt = fmt;
   const int save_must_redraw = must_redraw;
   const int save_redr_type = curwin->w_redr_type;
@@ -3471,10 +3473,18 @@ int build_stl_str_hl(
   // When the format starts with "%!" then evaluate it as an expression and
   // use the result as the actual format string.
   if (fmt[0] == '%' && fmt[1] == '!') {
+    typval_T tv = {
+      .v_type = VAR_NUMBER,
+      .vval.v_number = wp->handle,
+    };
+    set_var(S_LEN("g:statusline_winid"), &tv, false);
+
     usefmt = eval_to_string_safe(fmt + 2, NULL, use_sandbox);
     if (usefmt == NULL) {
       usefmt = fmt;
     }
+
+    do_unlet(S_LEN("g:statusline_winid"), true);
   }
 
   if (fillchar == 0) {
@@ -3903,8 +3913,10 @@ int build_stl_str_hl(
       // { Evaluate the expression
 
       // Store the current buffer number as a string variable
-      vim_snprintf((char *)tmp, sizeof(tmp), "%d", curbuf->b_fnum);
-      set_internal_string_var((char_u *)"g:actual_curbuf", tmp);
+      vim_snprintf((char *)buf_tmp, sizeof(buf_tmp), "%d", curbuf->b_fnum);
+      set_internal_string_var((char_u *)"g:actual_curbuf", buf_tmp);
+      vim_snprintf((char *)win_tmp, sizeof(win_tmp), "%d", curwin->handle);
+      set_internal_string_var((char_u *)"g:actual_curwin", win_tmp);
 
       buf_T *const save_curbuf = curbuf;
       win_T *const save_curwin = curwin;
@@ -3925,6 +3937,7 @@ int build_stl_str_hl(
 
       // Remove the variable we just stored
       do_unlet(S_LEN("g:actual_curbuf"), true);
+      do_unlet(S_LEN("g:actual_curwin"), true);
 
       // }
 
@@ -3983,8 +3996,8 @@ int build_stl_str_hl(
       // Store the position percentage in our temporary buffer.
       // Note: We cannot store the value in `num` because
       //       `get_rel_pos` can return a named position. Ex: "Top"
-      get_rel_pos(wp, tmp, TMPLEN);
-      str = tmp;
+      get_rel_pos(wp, buf_tmp, TMPLEN);
+      str = buf_tmp;
       break;
 
     case STL_ARGLISTSTAT:
@@ -3994,19 +4007,19 @@ int build_stl_str_hl(
       //       at the end of the null-terminated string.
       //       Setting the first byte to null means it will place the argument
       //       number string at the beginning of the buffer.
-      tmp[0] = 0;
+      buf_tmp[0] = 0;
 
       // Note: The call will only return true if it actually
-      //       appended data to the `tmp` buffer.
-      if (append_arg_number(wp, tmp, (int)sizeof(tmp), false)) {
-        str = tmp;
+      //       appended data to the `buf_tmp` buffer.
+      if (append_arg_number(wp, buf_tmp, (int)sizeof(buf_tmp), false)) {
+        str = buf_tmp;
       }
       break;
 
     case STL_KEYMAP:
       fillable = false;
-      if (get_keymap_str(wp, (char_u *)"<%s>", tmp, TMPLEN)) {
-        str = tmp;
+      if (get_keymap_str(wp, (char_u *)"<%s>", buf_tmp, TMPLEN)) {
+        str = buf_tmp;
       }
       break;
     case STL_PAGENUM:
@@ -4063,9 +4076,9 @@ int build_stl_str_hl(
       // (including the brackets and null terminating character)
       if (*wp->w_buffer->b_p_ft != NUL
           && STRLEN(wp->w_buffer->b_p_ft) < TMPLEN - 3) {
-        vim_snprintf((char *)tmp, sizeof(tmp), "[%s]",
-            wp->w_buffer->b_p_ft);
-        str = tmp;
+        vim_snprintf((char *)buf_tmp, sizeof(buf_tmp), "[%s]",
+                     wp->w_buffer->b_p_ft);
+        str = buf_tmp;
       }
       break;
 
@@ -4077,13 +4090,13 @@ int build_stl_str_hl(
       // (including the comma and null terminating character)
       if (*wp->w_buffer->b_p_ft != NUL
           && STRLEN(wp->w_buffer->b_p_ft) < TMPLEN - 2) {
-        vim_snprintf((char *)tmp, sizeof(tmp), ",%s",
-            wp->w_buffer->b_p_ft);
+        vim_snprintf((char *)buf_tmp, sizeof(buf_tmp), ",%s",
+                     wp->w_buffer->b_p_ft);
         // Uppercase the file extension
-        for (char_u *t = tmp; *t != 0; t++) {
+        for (char_u *t = buf_tmp; *t != 0; t++) {
           *t = (char_u)TOUPPER_LOC(*t);
         }
-        str = tmp;
+        str = buf_tmp;
       }
       break;
     }

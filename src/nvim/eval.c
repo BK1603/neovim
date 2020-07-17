@@ -2818,7 +2818,7 @@ static int do_unlet_var(lval_T *const lp, char_u *const name_end, int forceit)
 /// @param[in]  fonceit  If true, do not complain if variable doesn’t exist.
 ///
 /// @return OK if it existed, FAIL otherwise.
-int do_unlet(const char *const name, const size_t name_len, const int forceit)
+int do_unlet(const char *const name, const size_t name_len, const bool forceit)
   FUNC_ATTR_NONNULL_ALL
 {
   const char *varname;
@@ -7143,6 +7143,16 @@ bool callback_from_typval(Callback *const callback, typval_T *const arg)
     func_ref(name);
     callback->data.funcref = vim_strsave(name);
     callback->type = kCallbackFuncref;
+  } else if (nlua_is_table_from_lua(arg)) {
+    char_u *name = nlua_register_table_as_callable(arg);
+
+    if (name != NULL) {
+      func_ref(name);
+      callback->data.funcref = vim_strsave(name);
+      callback->type = kCallbackFuncref;
+    } else {
+      r = FAIL;
+    }
   } else if (arg->v_type == VAR_NUMBER && arg->vval.v_number == 0) {
     callback->type = kCallbackNone;
   } else {
@@ -8137,9 +8147,6 @@ void set_argv_var(char **argv, int argc)
   list_T *l = tv_list_alloc(argc);
   int i;
 
-  if (l == NULL) {
-    getout(1);
-  }
   tv_list_set_lock(l, VAR_FIXED);
   for (i = 0; i < argc; i++) {
     tv_list_append_string(l, (const char *const)argv[i], -1);

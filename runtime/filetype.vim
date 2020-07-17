@@ -458,7 +458,7 @@ au BufNewFile,BufRead *.desc			setf desc
 au BufNewFile,BufRead *.d			call dist#ft#DtraceCheck()
 
 " Desktop files
-au BufNewFile,BufRead *.desktop,.directory	setf desktop
+au BufNewFile,BufRead *.desktop,*.directory	setf desktop
 
 " Dict config
 au BufNewFile,BufRead dict.conf,.dictrc		setf dictconf
@@ -538,7 +538,7 @@ au BufNewFile,BufRead *.ecd			setf ecd
 au BufNewFile,BufRead *.e,*.E			call dist#ft#FTe()
 
 " Elinks configuration
-au BufNewFile,BufRead */etc/elinks.conf,*/.elinks/elinks.conf	setf elinks
+au BufNewFile,BufRead elinks.conf		setf elinks
 
 " ERicsson LANGuage; Yaws is erlang too
 au BufNewFile,BufRead *.erl,*.hrl,*.yaws	setf erlang
@@ -1130,8 +1130,17 @@ au BufNewFile,BufRead *.ora			setf ora
 " Packet filter conf
 au BufNewFile,BufRead pf.conf			setf pf
 
+" Pacman Config (close enough to dosini)
+au BufNewFile,BufRead */etc/pacman.conf		setf dosini
+
+" Pacman hooks
+au BufNewFile,BufRead *.hook
+	\ if getline(1) == '[Trigger]' |
+	\   setf dosini |
+	\ endif
+
 " Pam conf
-au BufNewFile,BufRead */etc/pam.conf		setf pamconf
+au BufNewFile,BufRead */etc/pam.conf			setf pamconf
 
 " Pam environment
 au BufNewFile,BufRead pam_env.conf,.pam_environment	setf pamenv
@@ -1162,6 +1171,7 @@ else
 endif
 au BufNewFile,BufRead *.plx,*.al,*.psgi		setf perl
 au BufNewFile,BufRead *.p6,*.pm6,*.pl6		setf perl6
+au BufNewFile,BufRead *.raku,*.rakumod		setf perl6
 
 " Perl, XPM or XPM2
 au BufNewFile,BufRead *.pm
@@ -1291,7 +1301,8 @@ au BufNewFile,BufRead *.pyx,*.pxd		setf pyrex
 
 " Python, Python Shell Startup and Python Stub Files
 " Quixote (Python-based web framework)
-au BufNewFile,BufRead *.py,*.pyw,.pythonstartup,.pythonrc,*.ptl,*.pyi  setf python
+au BufNewFile,BufRead *.py,*.pyw,.pythonstartup,.pythonrc  setf python
+au BufNewFile,BufRead *.ptl,*.pyi,SConstruct		   setf python
 
 " Radiance
 au BufNewFile,BufRead *.rad,*.mat		setf radiance
@@ -1613,10 +1624,12 @@ au BufNewFile,BufRead *.sqlj			setf sqlj
 au BufNewFile,BufRead *.sqr,*.sqi		setf sqr
 
 " OpenSSH configuration
-au BufNewFile,BufRead ssh_config,*/.ssh/config	setf sshconfig
+au BufNewFile,BufRead ssh_config,*/.ssh/config		setf sshconfig
+au BufNewFile,BufRead */etc/ssh/ssh_config.d/*.conf	setf sshconfig
 
 " OpenSSH server configuration
-au BufNewFile,BufRead sshd_config		setf sshdconfig
+au BufNewFile,BufRead sshd_config			setf sshdconfig
+au BufNewFile,BufRead */etc/ssh/sshd_config.d/*.conf	setf sshdconfig
 
 " Stata
 au BufNewFile,BufRead *.ado,*.do,*.imata,*.mata	setf stata
@@ -1647,8 +1660,9 @@ au BufNewFile,BufRead *.sil 			setf sil
 au BufNewFile,BufRead */etc/sysctl.conf,*/etc/sysctl.d/*.conf	setf sysctl
 
 " Systemd unit files
-au BufNewFile,BufRead */systemd/*.{automount,mount,path,service,socket,swap,target,timer}	setf systemd
+au BufNewFile,BufRead */systemd/*.{automount,dnssd,link,mount,netdev,network,nspawn,path,service,slice,socket,swap,target,timer}	setf systemd
 " Systemd overrides
+au BufNewFile,BufRead */etc/systemd/*.conf.d/*.conf	setf systemd
 au BufNewFile,BufRead */etc/systemd/system/*.d/*.conf	setf systemd
 au BufNewFile,BufRead */.config/systemd/user/*.d/*.conf	setf systemd
 " Systemd temp files

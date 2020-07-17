@@ -586,9 +586,7 @@ do
       old_utf16_size)
     local _ = log.debug() and log.debug("on_lines", bufnr, changedtick, firstline,
     lastline, new_lastline, old_byte_size, old_utf32_size, old_utf16_size, nvim_buf_get_lines(bufnr, firstline, new_lastline, true))
-    if old_byte_size == 0 then
-      return
-    end
+
     -- Don't do anything if there are no clients attached.
     if tbl_isempty(all_buffer_active_clients[bufnr] or {}) then
       return
@@ -879,11 +877,11 @@ function lsp.buf_request_sync(bufnr, method, params, timeout_ms)
 end
 
 --- Send a notification to a server
--- @param bufnr [number] (optional): The number of the buffer
--- @param method [string]: Name of the request method
--- @param params [string]: Arguments to send to the server
---
--- @returns true if any client returns true; false otherwise
+--@param bufnr [number] (optional): The number of the buffer
+--@param method [string]: Name of the request method
+--@param params [string]: Arguments to send to the server
+---
+--@returns true if any client returns true; false otherwise
 function lsp.buf_notify(bufnr, method, params)
   validate {
     bufnr    = { bufnr, 'n', true };

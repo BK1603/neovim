@@ -21,14 +21,15 @@ function check_notifications()
       if uv.fs_stat(watcher.ffname) ~= nil then
         -- check for buffer settings here
         local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
-        watcher.pending_notifs = false
 
         -- if never just update
         if option == 'never' then
           vim.api.nvim_command('call fswatch#Reload("'..watcher.bufnr..'")')
+          watcher.pending_notifs = false
         -- if always notify then update
         elseif option == 'always' then
           vim.api.nvim_command('call fswatch#PromptReload("'..watcher.bufnr..'")')
+          watcher.pending_notifs = false
         -- if changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
           -- if buffer was changed notify
@@ -39,9 +40,7 @@ function check_notifications()
           else
             vim.api.nvim_command('call fswatch#Reload("'..watcher.bufnr..'")')
           end
-        else
-          -- we didn't react to the notification, re-mark it as pending
-          watcher.pending_notifs = true
+          watcher.pending_notifs = false
         end
       else
         print("ERR: File "..watcher.fname.." removed")

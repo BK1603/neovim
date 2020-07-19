@@ -17,10 +17,10 @@ local WatcherList = {}
 -- Callback for the check handle
 function check_notifications()
   for f, watcher in pairs(WatcherList) do
-    if watcher.pending_notifs and watcher.paused == false then
+    local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
+    if watcher.pending_notifs and watcher.paused == false and option ~= 'off' then
       if uv.fs_stat(watcher.ffname) ~= nil then
         -- check for buffer settings here
-        local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
 
         -- if never just update
         if option == 'never' then

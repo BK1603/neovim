@@ -14,20 +14,22 @@ function! fcnotify#PromptReload(buf)
   if choice == 1
     call fcnotify#Reload(a:buf)
   elseif choice == 2
-    let s:save_swb = &switchbuf
-    call fcnotify#DiffOrig()
+    call fcnotify#DiffOrig(a:buf)
   endif
 endfunction
 
 " function to reload the buffer
 function! fcnotify#Reload(buf)
-  execute 'silent checktime '.a:buf
+  tab new
+  set nobuflisted
+  execute 'edit! '.bufname(a:buf)
+  tab close
 endfunction
 
 " function display the diff between the current buffer and original file
-function! fcnotify#DiffOrig()
-  execute 'set switchbuf=usetab'
-  execute 'sb '.a:buf
+function! fcnotify#DiffOrig(buf)
+  tab new
+  execute 'b '.a:buf
   vert new
   set buftype=nofile
   read ++edit #
@@ -36,8 +38,6 @@ function! fcnotify#DiffOrig()
   wincmd p
   diffthis
   wincmd r
-  execute 'set switchbuf='.s:save_swb
-  unlet s:save_swb
 endfunction
 
 let &cpo = s:save_cpo " restore user coptions

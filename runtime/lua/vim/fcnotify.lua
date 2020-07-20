@@ -32,11 +32,9 @@ function check_notifications()
           watcher.pending_notifs = false
         -- if changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
-          -- if buffer was changed notify
           local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
           if modified then
             vim.api.nvim_command('call fcnotify#PromptReload("'..watcher.bufnr..'")')
-          -- else update
           else
             vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
           end
@@ -53,7 +51,7 @@ local check_handle = uv.new_check()
 check_handle:start(vim.schedule_wrap(check_notifications))
 
 function Watcher:new(fname)
-  assert(fname ~= '', 'Watcher.new: Error: fname is an empty string')
+  vim.validate{fname = {fname, 'string', false}}
   -- get full path name for the file
   local ffname = vim.api.nvim_call_function('fnamemodify', {fname, ':p'})
   w = {bufnr = vim.api.nvim_call_function('bufnr', {fname}),
@@ -65,9 +63,6 @@ function Watcher:new(fname)
 end
 
 function Watcher:start()
-  assert(self.fname ~= '', 'Watcher.start: Error: no file to watch')
-  assert(self.ffname ~= '', 'Watcher.start: Error: full path for file not available')
-  -- get a new handle
   self.handle = uv.new_fs_event()
   self.handle:start(self.ffname, {}, function(...)
     self:on_change(...)
@@ -75,9 +70,8 @@ function Watcher:start()
 end
 
 function Watcher:stop()
-  assert(self.fname ~= '', 'Watcher.stop: Error: no file being watched')
-  assert(self.handle ~= nil, 'Watcher.stop: Error: no handle watching the file')
   self.handle:stop()
+
   -- close the handle altogether, for windows.
   if self.handle:is_closing() then
     return
@@ -93,12 +87,10 @@ function Watcher:on_change(err, fname, event)
 end
 
 function Watcher.start_watch(fname)
-  -- if a watcher already exists, close it.
   if WatcherList[fname] ~= nil then
     WatcherList[fname]:stop()
   end
 
-  -- create a new watcher and it to the watcher list.
   WatcherList[fname] = Watcher:new(fname)
   WatcherList[fname]:start()
 end
@@ -139,7 +131,7 @@ end
 function Watcher.print_all()
   print('Printing all watchers:')
   for i, watcher in pairs(WatcherList) do
-    print(i..' '..watcher.fname, watcher.pending_notifs)
+    print(vim.inspect(watcher))
   end
 end
 

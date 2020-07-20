@@ -309,6 +309,8 @@ static char *(p_bs_values[]) =        { "indent", "eol", "start", NULL };
 static char *(p_fdm_values[]) =       { "manual", "expr", "marker", "indent",
                                         "syntax",  "diff", NULL };
 static char *(p_fcl_values[]) =       { "all", NULL };
+static char *(p_fcn_values[]) =       { "off", "always", "changed", "never",
+                                        NULL };
 static char *(p_cot_values[]) =       { "menu", "menuone", "longest", "preview",
                                         "noinsert", "noselect", NULL };
 static char *(p_icm_values[]) =       { "nosplit", "split", NULL };
@@ -2759,6 +2761,10 @@ ambw_end:
     }
   } else if (varp == &p_ei) {  // 'eventignore'
     if (check_ei() == FAIL) {
+      errmsg = e_invarg;
+    }
+  } else if (gvarp == &p_fcnotify) {  // 'filechangenotify'
+    if (check_opt_strings(p_fcnotify, p_fcn_values, true) != OK) {
       errmsg = e_invarg;
     }
   // 'encoding', 'fileencoding' and 'makeencoding'

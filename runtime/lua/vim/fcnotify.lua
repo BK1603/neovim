@@ -9,7 +9,7 @@ local WatcherList = {}
 -- Callback for the check handle, checks if there are pending notifications
 -- for any watcher, and handles them as per the value of the `fcnotify`
 -- option.
-function check_notifications()
+local function check_notifications()
   for f, watcher in pairs(WatcherList) do
     local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
     if watcher.pending_notifs and watcher.paused == false and option ~= 'off' then
@@ -39,9 +39,30 @@ function check_notifications()
   end
 end
 
+-- Checks if a buffer should have a watcher attached to it.
+-- Ignores all the buffers that aren't listed, or have a buf id
+-- less than 0.
+-- Ignores the [NO NAME] buffer.
+local function valid_buf(fname)
+  if fname == '' then
+    return false
+  end
+
+  local bufnr = vim.api.nvim_call_function('bufnr', {fname})
+  local buflisted = vim.api.nvim_buf_get_option(bufnr, 'buflisted')
+
+  if bufnr < 0 or not buflisted then
+    return false
+  end
+  return true
+end
+
 local check_handle = uv.new_check()
 check_handle:start(vim.schedule_wrap(check_notifications))
 
+-- Creates and initializes a new watcher with the given filename.
+--
+--@param fname: (required, string) The path that the watcher should watch.
 function Watcher:new(fname)
   vim.validate{fname = {fname, 'string', false}}
   -- get full path name for the file
@@ -54,6 +75,7 @@ function Watcher:new(fname)
   return w
 end
 
+-- Starts the watcher
 function Watcher:start()
   self.handle = uv.new_fs_event()
   self.handle:start(self.ffname, {}, function(...)
@@ -61,6 +83,7 @@ function Watcher:start()
   end)
 end
 
+-- Stops the watcher and closes the handle.
 function Watcher:stop()
   self.handle:stop()
 
@@ -78,7 +101,14 @@ function Watcher:on_change(err, fname, event)
   self:start()
 end
 
+-- Starts and initializes a watcher for the given path.
+--
+--@param fname: (required, string) The path that the watcher should watch.
 function Watcher.start_watch(fname)
+  if not valid_buf(fname) then
+    return
+  end
+
   if WatcherList[fname] ~= nil then
     WatcherList[fname]:stop()
   end
@@ -87,14 +117,16 @@ function Watcher.start_watch(fname)
   WatcherList[fname]:start()
 end
 
+-- Stops the watcher watching a given file and closes it's handle.
+--
+--@param fname: (required, string) The path which is being watched.
 function Watcher.stop_watch(fname)
   -- can't close watchers for certain buffers
-  local bufnr = vim.api.nvim_call_function('bufnr', {fname})
-  local buflisted = vim.api.nvim_buf_get_option(bufnr, 'buflisted')
-  if not buflisted then
+  if not valid_buf(fname) then
     return
   end
 
+  print(fname)
   -- shouldn't happen
   if WatcherList[fname] == nil then
     print(fname..' not exists')
@@ -126,5 +158,4 @@ function Watcher.print_all()
     print(vim.inspect(watcher))
   end
 end
-
 return Watcher

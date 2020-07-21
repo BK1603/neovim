@@ -1,36 +1,28 @@
---[[
-  Create a file watcher, each watcher is identified by the name of the file that it
-  watches. We can use a lua table to store all watchers indexed by their filenames
-  so that we can close the required watcher during the callback to on_change to
-  debounce the watcher.
---]]
+-- Create a file watcher, each watcher is identified by the name of the file that it
+-- watches.
 
 local uv = vim.loop
 
 local Watcher = {}
 local WatcherList = {}
 
--- check handle to check for any pending notifications in a watcher.
--- Only displays the notifications if neovim is in focus, and the buffer
--- is the current buffer.
-
--- Callback for the check handle
+-- Callback for the check handle, checks if there are pending notifications
+-- for any watcher, and handles them as per the value of the `fcnotify`
+-- option.
 function check_notifications()
   for f, watcher in pairs(WatcherList) do
     local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
     if watcher.pending_notifs and watcher.paused == false and option ~= 'off' then
       if uv.fs_stat(watcher.ffname) ~= nil then
-        -- check for buffer settings here
-
-        -- if never just update
+        -- If never just update
         if option == 'never' then
           vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
           watcher.pending_notifs = false
-        -- if always notify then update
+        -- If always notify then update
         elseif option == 'always' then
           vim.api.nvim_command('call fcnotify#PromptReload("'..watcher.bufnr..'")')
           watcher.pending_notifs = false
-        -- if changed check if the buffer is modified and notify else update
+        -- If changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
           local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
           if modified then

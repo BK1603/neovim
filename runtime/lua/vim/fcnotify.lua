@@ -20,13 +20,13 @@ local function check_notifications()
           watcher.pending_notifs = false
         -- If always notify then update
         elseif option == 'always' then
-          vim.api.nvim_command('call fcnotify#PromptReload("'..watcher.bufnr..'")')
+          vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
           watcher.pending_notifs = false
         -- If changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
           local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
           if modified then
-            vim.api.nvim_command('call fcnotify#PromptReload("'..watcher.bufnr..'")')
+            vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
           else
             vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
           end

@@ -14,22 +14,15 @@ local function check_notifications()
     local option = vim.api.nvim_buf_get_option(watcher.bufnr, 'filechangenotify')
     if watcher.pending_notifs and watcher.paused == false and option ~= 'off' then
       if uv.fs_stat(watcher.ffname) ~= nil then
-        -- If never just update
-        if option == 'never' then
-          vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
-          watcher.pending_notifs = false
         -- If always notify then update
-        elseif option == 'always' then
-          vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
+        if option == 'always' then
+          vim.api.nvim_command('setlocal noautoread')
+          vim.api.nvim_command('checktime '..watcher.bufnr)
           watcher.pending_notifs = false
         -- If changed check if the buffer is modified and notify else update
         elseif option == 'changed' then
-          local modified = vim.api.nvim_buf_get_option(watcher.bufnr, 'modified')
-          if modified then
-            vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
-          else
-            vim.api.nvim_command('call fcnotify#Reload("'..watcher.bufnr..'")')
-          end
+          vim.api.nvim_command('setlocal autoread')
+          vim.api.nvim_command('checktime '..watcher.bufnr)
           watcher.pending_notifs = false
         end
       else

@@ -5027,8 +5027,24 @@ buf_check_timestamp(
         xstrlcat(tbuf, "\n", tbuf_len - 1);
         xstrlcat(tbuf, mesg2, tbuf_len - 1);
       }
-      if (do_dialog(VIM_WARNING, (char_u *) _("Warning"), (char_u *) tbuf,
-                    (char_u *) _("&OK\n&Load File"), 1, NULL, true) == 2) {
+      int choice = do_dialog(VIM_WARNING, (char_u *) _("Warning"), (char_u *) tbuf,
+                    (char_u *) _("&OK\n&Show diff\n&Load File"), 1, NULL, true);
+      if (choice == 2) {
+        tabpage_new();
+        win_split(0, WSP_VERT);
+        readfile(buf->b_ffname, buf->b_fname, (linenr_T)1, (linenr_T)0, (linenr_T)MAXLNUM, NULL, 0);
+        curwin->w_p_diff = true;
+        diff_buf_add(curbuf);
+        diff_invalidate(curbuf);
+        do_window('r', 0, NUL);
+        do_window('p', 0, NUL);
+        do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->handle, false);
+        curwin->w_p_diff = true;
+        diff_buf_add(curbuf);
+        diff_invalidate(curbuf);
+        do_window('p', 0, NUL);
+      }
+      else if (choice == 3) {
         reload = true;
       }
     } else if (State > NORMAL_BUSY || (State & CMDLINE) || already_warned) {

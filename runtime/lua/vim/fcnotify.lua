@@ -43,8 +43,9 @@ local function valid_buf(fname)
 
   local bufnr = vim.api.nvim_call_function('bufnr', {fname})
   local buflisted = vim.api.nvim_buf_get_option(bufnr, 'buflisted')
+  local buftype = vim.api.nvim_buf_get_option(bufnr, 'buftype')
 
-  if bufnr < 0 or not buflisted then
+  if bufnr < 0 or not buflisted or buftype == 'nofile' then
     return false
   end
   return true

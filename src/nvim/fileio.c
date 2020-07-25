@@ -5032,17 +5032,14 @@ buf_check_timestamp(
       if (choice == 2) {
         tabpage_new();
         win_split(0, WSP_VERT);
+        do_cmdline((char_u *)"set buftype=nofile", NULL, NULL, 0);
         readfile(buf->b_ffname, buf->b_fname, (linenr_T)1, (linenr_T)0, (linenr_T)MAXLNUM, NULL, 0);
-        curwin->w_p_diff = true;
-        diff_buf_add(curbuf);
-        diff_invalidate(curbuf);
+        do_cmdline((char_u *)"0d_", NULL, NULL, 0);
+        do_cmdline((char_u *)"diffthis", NULL, NULL, 0);
         do_window('r', 0, NUL);
         do_window('p', 0, NUL);
         do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->handle, false);
-        curwin->w_p_diff = true;
-        diff_buf_add(curbuf);
-        diff_invalidate(curbuf);
-        do_window('p', 0, NUL);
+        do_cmdline((char_u *)"diffthis", NULL, NULL, 0);
       }
       else if (choice == 3) {
         reload = true;

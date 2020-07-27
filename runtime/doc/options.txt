@@ -2167,6 +2167,19 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option is reset when the 'paste' option is set and restored when
 	the 'paste' option is reset.
 
+				*'filechangenotify'* *'fcnotify'*
+'filechangenotify' 'fcnotify'	string (default "off")
+				local to buffer
+	Watch for changes to a file. How to react for the changes depends on
+	the value of the option. The option can take following values:
+	
+		off	Don't react to changes happening to a file.
+		never	Never notify about the changes to a file. Directly
+			update the file.
+		changed	Notify about the changes to a file and prompt for a
+			reload if there are unsaved changes in a buffer. Else 
+			update the buffer.
+
 				*'fileencoding'* *'fenc'* *E213*
 'fileencoding' 'fenc'	string (default: "")
 			local to buffer

@@ -34,10 +34,15 @@ local function valid_buf(fname)
   end
 
   local bufnr = vim.api.nvim_call_function('bufnr', {fname})
+
+  if bufnr< 0 then
+    return false
+  end
+
   local buflisted = vim.api.nvim_buf_get_option(bufnr, 'buflisted')
   local buftype = vim.api.nvim_buf_get_option(bufnr, 'buftype')
 
-  if bufnr < 0 or not buflisted or buftype == 'nofile' then
+  if not buflisted or buftype == 'nofile' or buftype == 'quickfix' then
     return false
   end
   return true

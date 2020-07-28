@@ -35,7 +35,7 @@ local function valid_buf(fname)
 
   local bufnr = vim.api.nvim_call_function('bufnr', {fname})
 
-  if bufnr< 0 then
+  if bufnr < 0 then
     return false
   end
 

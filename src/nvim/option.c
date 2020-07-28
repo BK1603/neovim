@@ -2763,7 +2763,7 @@ ambw_end:
       errmsg = e_invarg;
     }
   } else if (gvarp == &p_fcnotify) {  // 'filechangenotify'
-    if (check_opt_strings(curbuf->b_p_fcnotify, p_fcn_values, false) != OK) {
+    if (check_opt_strings(curbuf->b_p_fcnotify, p_fcn_values, true) != OK) {
       errmsg = e_invarg;
     } else {
       if (strcmp(curbuf->b_p_fcnotify, "always") == 0) {

@@ -2174,10 +2174,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 	the value of the option. The option can take following values:
 	
 		off	Don't react to changes happening to a file.
-		never	Never notify about the changes to a file. Directly
-			update the file.
+		always	Always notify about the changes to a file, by
+			prompting the user for a reload.
 		changed	Notify about the changes to a file and prompt for a
-			reload if there are unsaved changes in a buffer. Else 
+			reload if there are unsaved changes in a buffer. Else
 			update the buffer.
 
 				*'fileencoding'* *'fenc'* *E213*
